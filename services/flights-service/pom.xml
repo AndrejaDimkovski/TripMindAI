@@ -6,9 +6,9 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
         <version>4.0.1</version>
-        <relativePath/> <!-- lookup parent from repository -->
+        <relativePath/>
     </parent>
-    <groupId>travelmindai.com.mk</groupId>
+    <groupId>tripmindai.com.mk</groupId>
     <artifactId>flights-service</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>flights-service</name>

@@ -1,0 +1,831 @@
+import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
+import { deleteMyPlan, getMyPlans } from "../api/planApi";
+import { generateTripItinerary } from "../api/itineraryApi";
+import TripItineraryMap from "../components/TripItineraryMap";
+
+function displayValue(value, fallback = "—") {
+    if (value == null) return fallback;
+    if (typeof value === "string" && value.trim() === "") return fallback;
+    return value;
+}
+
+function fmtMoney(v) {
+    const n = Number(v || 0);
+    return Number.isFinite(n) ? n.toFixed(2) : "0.00";
+}
+
+function fmtDateDisplay(value) {
+    if (!value) return "—";
+    try {
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) {
+                const [yyyy, mm, dd] = String(value).split("-");
+                return `${dd}.${mm}.${yyyy}`;
+            }
+            return String(value);
+        }
+        const dd = String(d.getDate()).padStart(2, "0");
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const yyyy = d.getFullYear();
+        return `${dd}.${mm}.${yyyy}`;
+    } catch {
+        return String(value);
+    }
+}
+
+function fmtDateTime(value) {
+    if (!value) return "—";
+    try {
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return String(value).replace("T", " ").slice(0, 16);
+
+        const dd = String(d.getDate()).padStart(2, "0");
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const yyyy = d.getFullYear();
+        const hh = String(d.getHours()).padStart(2, "0");
+        const min = String(d.getMinutes()).padStart(2, "0");
+
+        return `${dd}.${mm}.${yyyy} ${hh}:${min}`;
+    } catch {
+        return String(value).replace("T", " ").slice(0, 16);
+    }
+}
+
+function fmtCoord(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n.toFixed(6) : "—";
+}
+
+function fmtMinutes(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? `${n} min` : "—";
+}
+
+function calculateNights(from, to) {
+    if (!from || !to) return null;
+
+    const d1 = new Date(from);
+    const d2 = new Date(to);
+
+    if (Number.isNaN(d1.getTime()) || Number.isNaN(d2.getTime())) return null;
+
+    const diffMs = d2.getTime() - d1.getTime();
+    const nights = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+    return nights > 0 ? nights : null;
+}
+
+function activityEmoji(type) {
+    switch (String(type || "").toLowerCase()) {
+        case "museum":
+            return "🏛️";
+        case "restaurant":
+            return "🍽️";
+        case "walking_route":
+            return "🚶";
+        case "park":
+            return "🌳";
+        case "shopping":
+            return "🛍️";
+        case "viewpoint":
+            return "🌇";
+        case "beach":
+            return "🏖️";
+        case "nightlife":
+            return "🌙";
+        default:
+            return "📍";
+    }
+}
+
+function normalizeSlotLabel(slot) {
+    switch (slot) {
+        case "MORNING":
+            return "☀️ Morning";
+        case "AFTERNOON":
+            return "🌤️ Afternoon";
+        case "EVENING":
+            return "🌙 Evening";
+        default:
+            return "🧭 Other";
+    }
+}
+
+function groupActivitiesByTimeSlot(activities) {
+    const grouped = {
+        MORNING: [],
+        AFTERNOON: [],
+        EVENING: [],
+        OTHER: [],
+    };
+
+    for (const activity of activities || []) {
+        const slot = String(activity?.timeSlot || "").toUpperCase();
+        if (slot === "MORNING" || slot === "AFTERNOON" || slot === "EVENING") {
+            grouped[slot].push(activity);
+        } else {
+            grouped.OTHER.push(activity);
+        }
+    }
+
+    return grouped;
+}
+
+function activityTypeText(type) {
+    const value = String(type || "").replaceAll("_", " ").trim();
+    if (!value) return "Activity";
+    return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatTripType(value) {
+    if (!value) return "—";
+    return value === "ROUND_TRIP" ? "Round trip" : "One way";
+}
+
+function formatStops(stops) {
+    if (stops == null || stops === "") return "—";
+
+    const n = Number(stops);
+    if (!Number.isFinite(n)) return "—";
+    if (n <= 0) return "Direct";
+    if (n === 1) return "1 stop";
+    return `${n} stops`;
+}
+
+function planDestinationLabel(plan) {
+    return displayValue(
+        plan?.destinationName ||
+        plan?.flightDestinationCity ||
+        plan?.destinationCityCode,
+        "Destination"
+    );
+}
+
+function planOriginLabel(plan) {
+    return displayValue(
+        plan?.flightOriginCity ||
+        plan?.origin,
+        "Origin"
+    );
+}
+
+function flightRouteLabel(plan) {
+    return `${planOriginLabel(plan)} → ${planDestinationLabel(plan)}`;
+}
+
+function flightAirportRouteLabel(plan) {
+    return `${displayValue(plan?.flightOriginIata)} → ${displayValue(plan?.flightDestIata)}`;
+}
+
+function HeroPill({ children }) {
+    return (
+        <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-white/90 backdrop-blur">
+            {children}
+        </span>
+    );
+}
+
+function HeroButton({ children, primary = false, className = "", ...props }) {
+    return (
+        <button
+            {...props}
+            className={`rounded-[18px] px-5 py-3 text-sm font-semibold transition ${
+                primary
+                    ? "bg-[#2b5da8] text-white shadow-lg hover:bg-[#214d8f] disabled:cursor-not-allowed disabled:bg-[#2b5da880]"
+                    : "border border-white/20 bg-white/10 text-white hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-50"
+            } ${className}`}
+        >
+            {children}
+        </button>
+    );
+}
+
+function GlassPanel({ children, className = "" }) {
+    return (
+        <div className={`rounded-[28px] border border-white/10 bg-white/10 backdrop-blur-xl shadow-2xl ${className}`}>
+            {children}
+        </div>
+    );
+}
+
+function GlassSection({ title, subtitle, children, className = "" }) {
+    return (
+        <GlassPanel className={`p-5 text-white lg:p-6 ${className}`}>
+            <div className="mb-5">
+                <h2 className="text-xl font-bold text-white">{title}</h2>
+                {subtitle ? <p className="mt-1 text-sm text-white/70">{subtitle}</p> : null}
+            </div>
+            {children}
+        </GlassPanel>
+    );
+}
+
+function Badge({ children, tone = "light" }) {
+    const styles = {
+        light: "bg-white/90 text-slate-900",
+        green: "bg-emerald-100 text-emerald-700",
+        blue: "bg-blue-100 text-blue-700",
+        yellow: "bg-amber-100 text-amber-700",
+        red: "bg-rose-100 text-rose-700",
+        slate: "bg-slate-100 text-slate-700",
+    };
+
+    return (
+        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${styles[tone] || styles.light}`}>
+            {children}
+        </span>
+    );
+}
+
+function InfoTile({ label, value }) {
+    return (
+        <div className="rounded-2xl bg-white/10 p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">
+                {label}
+            </div>
+            <div className="mt-2 break-words whitespace-pre-line text-sm font-semibold leading-6 text-white">
+                {displayValue(value)}
+            </div>
+        </div>
+    );
+}
+
+function PlanDetailsModal({ plan, onClose }) {
+    if (!plan) return null;
+
+    const nights = calculateNights(plan.fromDate, plan.toDate);
+
+    return (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+            <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-[30px] border border-white/10 bg-[#102131] p-6 shadow-2xl">
+                <div className="mb-6 flex items-start justify-between gap-4">
+                    <div>
+                        <div className="flex flex-wrap gap-2">
+                            <Badge tone="green">{displayValue(plan.countryName, "Country")}</Badge>
+                            <Badge tone="blue">{formatTripType(plan.flightTripType)}</Badge>
+                            <Badge tone="light">{formatStops(plan.flightStops)}</Badge>
+                        </div>
+
+                        <h2 className="mt-4 text-3xl font-bold text-white">
+                            {displayValue(plan.destinationName || plan.destinationCityCode, "Trip details")}
+                        </h2>
+
+                        <p className="mt-2 text-sm text-white/70">
+                            Detailed booking summary for this saved plan.
+                        </p>
+                    </div>
+
+                    <HeroButton onClick={onClose} type="button">
+                        Close
+                    </HeroButton>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <InfoTile
+                        label="Travel dates"
+                        value={`${fmtDateDisplay(plan.fromDate)} → ${fmtDateDisplay(plan.toDate)}`}
+                    />
+                    <InfoTile
+                        label="Guests / Nights"
+                        value={`${plan.adults || 1} guest${Number(plan.adults || 1) > 1 ? "s" : ""}${nights ? ` · ${nights} night${nights > 1 ? "s" : ""}` : ""}`}
+                    />
+                    <InfoTile
+                        label="Route"
+                        value={flightRouteLabel(plan)}
+                    />
+                    <InfoTile
+                        label="Total"
+                        value={`${fmtMoney(plan.totalPrice)} ${plan.totalCurrency || "EUR"}`}
+                    />
+                </div>
+
+                <div className="mt-6 grid gap-6 xl:grid-cols-2">
+                    <GlassPanel className="p-5 text-white">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="text-xl font-bold">✈️ Flight summary</h3>
+                            <Badge tone="green">{formatTripType(plan.flightTripType)}</Badge>
+                        </div>
+
+                        <div className="grid gap-3 md:grid-cols-2">
+                            <InfoTile label="Airline" value={plan.flightAirlineCode} />
+                            <InfoTile label="Stops" value={formatStops(plan.flightStops)} />
+                            <InfoTile
+                                label="Route"
+                                value={flightRouteLabel(plan)}
+                            />
+                            <InfoTile
+                                label="Airports"
+                                value={flightAirportRouteLabel(plan)}
+                            />
+                            <InfoTile label="Departure" value={fmtDateTime(plan.flightDepartureAt)} />
+                            <InfoTile label="Arrival" value={fmtDateTime(plan.flightArrivalAt)} />
+                            <InfoTile
+                                label="Flight price"
+                                value={`${fmtMoney(plan.flightPrice)} ${plan.flightCurrency || "EUR"}`}
+                            />
+                            <InfoTile label="Trip type" value={formatTripType(plan.flightTripType)} />
+                        </div>
+                    </GlassPanel>
+
+                    <GlassPanel className="p-5 text-white">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="text-xl font-bold">🏨 Hotel summary</h3>
+                            <Badge tone="blue">{displayValue(plan.hotelName, "Hotel")}</Badge>
+                        </div>
+
+                        <div className="grid gap-3 md:grid-cols-2">
+                            <InfoTile label="Hotel" value={plan.hotelName} />
+                            <InfoTile label="Check-in" value={fmtDateDisplay(plan.hotelCheckInDate || plan.fromDate)} />
+                            <InfoTile label="Check-out" value={fmtDateDisplay(plan.hotelCheckOutDate || plan.toDate)} />
+                            <InfoTile label="Room quantity" value={plan.roomQuantity || 1} />
+                            <InfoTile label="Board type" value={plan.boardType} />
+                            <InfoTile label="Payment policy" value={plan.paymentPolicy} />
+                            <InfoTile
+                                label="Hotel price"
+                                value={`${fmtMoney(plan.hotelPrice)} ${plan.hotelCurrency || "EUR"}`}
+                            />
+                        </div>
+                    </GlassPanel>
+                </div>
+
+                <div className="mt-6">
+                    <GlassPanel className="p-5 text-white">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="text-xl font-bold">💳 Final recap</h3>
+                            <Badge tone="yellow">Saved plan</Badge>
+                        </div>
+
+                        <div className="grid gap-3 md:grid-cols-3">
+                            <InfoTile label="Flight cost" value={`${fmtMoney(plan.flightPrice)} ${plan.flightCurrency || "EUR"}`} />
+                            <InfoTile label="Hotel cost" value={`${fmtMoney(plan.hotelPrice)} ${plan.hotelCurrency || "EUR"}`} />
+                            <InfoTile label="Grand total" value={`${fmtMoney(plan.totalPrice)} ${plan.totalCurrency || "EUR"}`} />
+                        </div>
+                    </GlassPanel>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export default function MyPlansPage() {
+    const location = useLocation();
+
+    const [plans, setPlans] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
+    const [deletingId, setDeletingId] = useState(null);
+    const [generatingId, setGeneratingId] = useState(null);
+    const [itineraries, setItineraries] = useState({});
+    const [selectedDayByPlan, setSelectedDayByPlan] = useState({});
+    const [showSavedMessage, setShowSavedMessage] = useState(!!location.state?.saved);
+    const [detailsPlan, setDetailsPlan] = useState(null);
+
+    async function loadPlans() {
+        setLoading(true);
+        setError("");
+
+        try {
+            const data = await getMyPlans();
+            setPlans(Array.isArray(data) ? data : []);
+        } catch (e) {
+            setError(e.message || "Failed to load your plans.");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    useEffect(() => {
+        loadPlans();
+    }, []);
+
+    async function handleDelete(id) {
+        const ok = window.confirm("Дали сигурно сакаш да го избришеш овој trip plan?");
+        if (!ok) return;
+
+        setDeletingId(id);
+
+        try {
+            await deleteMyPlan(id);
+            setPlans((prev) => prev.filter((p) => p.id !== id));
+
+            setItineraries((prev) => {
+                const copy = { ...prev };
+                delete copy[id];
+                return copy;
+            });
+
+            setSelectedDayByPlan((prev) => {
+                const copy = { ...prev };
+                delete copy[id];
+                return copy;
+            });
+
+            if (detailsPlan?.id === id) {
+                setDetailsPlan(null);
+            }
+        } catch (e) {
+            alert(e.message || "Delete failed.");
+        } finally {
+            setDeletingId(null);
+        }
+    }
+
+    async function handleGenerateItinerary(planId) {
+        try {
+            setGeneratingId(planId);
+
+            const data = await generateTripItinerary(planId);
+
+            setItineraries((prev) => ({
+                ...prev,
+                [planId]: data,
+            }));
+
+            setSelectedDayByPlan((prev) => ({
+                ...prev,
+                [planId]: 0,
+            }));
+        } catch (e) {
+            alert(e.message || "Failed to generate trip itinerary.");
+        } finally {
+            setGeneratingId(null);
+        }
+    }
+
+    const totalSaved = useMemo(() => {
+        return plans.reduce((sum, p) => sum + Number(p.totalPrice || 0), 0);
+    }, [plans]);
+
+    return (
+        <div className="min-h-screen bg-[#0b1620]">
+            <section className="relative min-h-[52vh] overflow-hidden">
+                <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1800&auto=format&fit=crop')] bg-cover bg-center" />
+                <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,14,20,0.88)_0%,rgba(8,18,28,0.68)_36%,rgba(8,18,28,0.34)_68%,rgba(8,18,28,0.28)_100%)]" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.12),transparent_30%)]" />
+
+                <div className="relative z-10 mx-auto w-full max-w-[1500px] px-4 pb-20 pt-24 lg:px-6">
+                    <div className="grid items-start gap-8 xl:grid-cols-[1.15fr_0.85fr]">
+                        <div className="pt-6 lg:pt-8">
+                            <HeroPill>TravelMindAI Dashboard</HeroPill>
+
+                            <h1 className="mt-6 max-w-3xl text-4xl font-extrabold leading-[1.08] text-white md:text-5xl xl:text-[3.8rem]">
+                                My Plans
+                            </h1>
+
+                            <p className="mt-4 max-w-2xl text-sm leading-7 text-white/80 md:text-base">
+                                Тука можеш да ги следиш, генерираш itinerary, гледаш booking summary и бришеш твоите зачувани trip plans.
+                            </p>
+
+                            <div className="mt-5 flex flex-wrap gap-2">
+                                <Badge tone="green">{plans.length} saved plans</Badge>
+                                <Badge tone="blue">€ {fmtMoney(totalSaved)} total value</Badge>
+                            </div>
+                        </div>
+
+                        <div className="w-full max-w-[520px] justify-self-end">
+                            <GlassSection title="Overview" subtitle="Quick summary of your saved trips">
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <InfoTile label="Saved plans" value={plans.length} />
+                                    <InfoTile label="Total saved value" value={`€ ${fmtMoney(totalSaved)}`} />
+                                </div>
+
+                                <div className="mt-4 rounded-2xl border border-emerald-300/20 bg-emerald-500/20 p-4">
+                                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-100">
+                                        Status
+                                    </div>
+                                    <div className="mt-2 text-sm font-semibold text-white">
+                                        Manage your trips, regenerate itineraries and review routes.
+                                    </div>
+                                </div>
+                            </GlassSection>
+                        </div>
+                    </div>
+
+                    {showSavedMessage ? (
+                        <div className="mt-8">
+                            <GlassPanel className="flex flex-col gap-3 p-4 text-white sm:flex-row sm:items-center sm:justify-between">
+                                <span className="text-sm">✅ Trip plan successfully saved.</span>
+                                <HeroButton
+                                    className="self-start sm:self-auto"
+                                    onClick={() => setShowSavedMessage(false)}
+                                    type="button"
+                                >
+                                    Close
+                                </HeroButton>
+                            </GlassPanel>
+                        </div>
+                    ) : null}
+
+                    {loading ? (
+                        <div className="mt-8">
+                            <GlassSection title="Loading">
+                                <div className="text-sm text-white/75">Loading your plans...</div>
+                            </GlassSection>
+                        </div>
+                    ) : null}
+
+                    {!loading && error ? (
+                        <div className="mt-8">
+                            <GlassSection title="Error">
+                                <div className="text-sm text-white/85">{error}</div>
+                            </GlassSection>
+                        </div>
+                    ) : null}
+
+                    {!loading && !error && plans.length === 0 ? (
+                        <div className="mt-8">
+                            <GlassSection title="No saved plans" subtitle="Your trip list is still empty.">
+                                <div className="flex flex-col items-center justify-center py-6 text-center">
+                                    <div className="text-5xl">🧳</div>
+                                    <div className="mt-4 text-lg font-semibold text-white">
+                                        Немаш зачувани trip plans
+                                    </div>
+                                    <div className="mt-2 max-w-xl text-sm leading-7 text-white/75">
+                                        Креирај trip од Plan Trip страницата и ќе се појави тука.
+                                    </div>
+                                </div>
+                            </GlassSection>
+                        </div>
+                    ) : null}
+
+                    {!loading && !error && plans.length > 0 ? (
+                        <div className="mt-8 space-y-6">
+                            {plans.map((p) => {
+                                const itinerary = itineraries[p.id];
+                                const selectedIndex = selectedDayByPlan[p.id] ?? 0;
+                                const selectedDay =
+                                    itinerary?.days?.[selectedIndex] || itinerary?.days?.[0] || null;
+
+                                const nights =
+                                    calculateNights(p.fromDate, p.toDate) ||
+                                    itinerary?.totalDays ||
+                                    null;
+
+                                const groupedActivities = groupActivitiesByTimeSlot(selectedDay?.activities || []);
+
+                                return (
+                                    <GlassSection
+                                        key={p.id}
+                                        title={displayValue(p.destinationName || p.destinationCityCode, "Destination")}
+                                        subtitle={`Created at: ${fmtDateTime(p.createdAt)}`}
+                                    >
+                                        <div className="flex flex-col gap-4 xl:flex-row xl:justify-between">
+                                            <div className="flex-1">
+                                                <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                                    <div>
+                                                        <div className="mb-3 flex flex-wrap items-center gap-2">
+                                                            <Badge tone="green">{displayValue(p.countryName, "Country")}</Badge>
+                                                            <Badge tone="light">
+                                                                {flightRouteLabel(p)}
+                                                            </Badge>
+                                                            <Badge tone="blue">
+                                                                {formatTripType(p.flightTripType)}
+                                                            </Badge>
+                                                            <Badge tone="light">
+                                                                {formatStops(p.flightStops)}
+                                                            </Badge>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="min-w-[220px] rounded-2xl border border-emerald-300/20 bg-emerald-500/20 px-4 py-4 text-right">
+                                                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-100">
+                                                            Total price
+                                                        </div>
+                                                        <div className="mt-2 text-2xl font-bold text-white">
+                                                            € {fmtMoney(p.totalPrice)} {p.totalCurrency || "EUR"}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="mb-4 grid gap-3 md:grid-cols-3">
+                                                    <InfoTile
+                                                        label="Trip dates"
+                                                        value={`${fmtDateDisplay(p.fromDate)} → ${fmtDateDisplay(p.toDate)}`}
+                                                    />
+                                                    <InfoTile
+                                                        label="Guests / Nights"
+                                                        value={`${p.adults || 1} guest${Number(p.adults || 1) > 1 ? "s" : ""}${nights ? ` • ${nights} night${nights > 1 ? "s" : ""}` : ""}`}
+                                                    />
+                                                    <InfoTile
+                                                        label="Route"
+                                                        value={flightRouteLabel(p)}
+                                                    />
+                                                </div>
+
+                                                <div className="grid gap-4 lg:grid-cols-2">
+                                                    <div className="rounded-2xl bg-white/10 p-4">
+                                                        <div className="mb-3 text-lg font-semibold text-white">✈️ Flight</div>
+
+                                                        <div className="space-y-2 text-sm text-white/75">
+                                                            <div><b className="text-white">Route:</b> {flightRouteLabel(p)}</div>
+                                                            <div><b className="text-white">Airports:</b> {flightAirportRouteLabel(p)}</div>
+                                                            <div><b className="text-white">Airline:</b> {displayValue(p.flightAirlineCode)}</div>
+                                                            <div><b className="text-white">Departure:</b> {fmtDateTime(p.flightDepartureAt)}</div>
+                                                            <div><b className="text-white">Arrival:</b> {fmtDateTime(p.flightArrivalAt)}</div>
+                                                            <div><b className="text-white">Stops:</b> {formatStops(p.flightStops)}</div>
+                                                            <div><b className="text-white">Price:</b> € {fmtMoney(p.flightPrice)} {p.flightCurrency || "EUR"}</div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="rounded-2xl bg-white/10 p-4">
+                                                        <div className="mb-3 text-lg font-semibold text-white">🏨 Hotel</div>
+
+                                                        <div className="space-y-2 text-sm text-white/75">
+                                                            <div><b className="text-white">Name:</b> {displayValue(p.hotelName)}</div>
+                                                            <div><b className="text-white">Price:</b> € {fmtMoney(p.hotelPrice)} {p.hotelCurrency || "EUR"}</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="mt-5 flex flex-wrap gap-3">
+                                                    <HeroButton onClick={() => setDetailsPlan(p)} type="button">
+                                                        View booking summary
+                                                    </HeroButton>
+
+                                                    <HeroButton
+                                                        primary
+                                                        onClick={() => handleGenerateItinerary(p.id)}
+                                                        disabled={generatingId === p.id}
+                                                        type="button"
+                                                    >
+                                                        {generatingId === p.id
+                                                            ? "Generating AI itinerary..."
+                                                            : itinerary
+                                                                ? "Regenerate Itinerary"
+                                                                : "Generate My Trip Plan"}
+                                                    </HeroButton>
+                                                </div>
+
+                                                {itinerary?.days?.length > 0 && selectedDay ? (
+                                                    <div className="mt-6 rounded-[28px] border border-white/10 bg-white/8 p-4 lg:p-5">
+                                                        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                                            <div>
+                                                                <h3 className="text-xl font-bold text-white">
+                                                                    {displayValue(itinerary.title, "Generated Trip Itinerary")}
+                                                                </h3>
+                                                                <div className="mt-1 text-sm text-white/70">
+                                                                    Select a day to view its activities and route map.
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex flex-wrap gap-2">
+                                                                <Badge tone="light">
+                                                                    {itinerary.totalDays || itinerary.days.length} day plan
+                                                                </Badge>
+                                                                {selectedDay.theme ? <Badge tone="blue">Theme: {selectedDay.theme}</Badge> : null}
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="mb-5 flex flex-wrap gap-3">
+                                                            {itinerary.days.map((day, idx) => (
+                                                                <button
+                                                                    key={`${p.id}-tab-${day.dayNumber}`}
+                                                                    className={`flex min-w-[120px] flex-col rounded-2xl border px-4 py-3 text-left transition ${
+                                                                        selectedIndex === idx
+                                                                            ? "border-emerald-400 bg-emerald-500 text-white shadow-sm"
+                                                                            : "border-white/10 bg-white/10 text-white hover:bg-white/15"
+                                                                    }`}
+                                                                    onClick={() =>
+                                                                        setSelectedDayByPlan((prev) => ({
+                                                                            ...prev,
+                                                                            [p.id]: idx,
+                                                                        }))
+                                                                    }
+                                                                    type="button"
+                                                                >
+                                                                    <span className="text-sm font-semibold">Day {day.dayNumber}</span>
+                                                                    <span className={`text-xs ${selectedIndex === idx ? "text-white/80" : "text-white/55"}`}>
+                                                                        {fmtDateDisplay(day.date)}
+                                                                    </span>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+
+                                                        <div className="rounded-[28px] border border-white/10 bg-white/10 p-4 lg:p-5">
+                                                            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                                                <div>
+                                                                    <h4 className="text-xl font-bold text-white">{displayValue(selectedDay.title, "Day plan")}</h4>
+                                                                    <div className="mt-1 text-sm text-white/65">
+                                                                        {fmtDateDisplay(selectedDay.date)}
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="flex flex-wrap gap-2">
+                                                                    <Badge tone="light">Day {selectedDay.dayNumber}</Badge>
+                                                                    {selectedDay.totalActivityMinutes ? (
+                                                                        <Badge tone="blue">Activities: {fmtMinutes(selectedDay.totalActivityMinutes)}</Badge>
+                                                                    ) : null}
+                                                                    {selectedDay.totalWalkingMinutes ? (
+                                                                        <Badge tone="green">Walking: {fmtMinutes(selectedDay.totalWalkingMinutes)}</Badge>
+                                                                    ) : null}
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                                                <InfoTile label="Theme" value={selectedDay.theme || "general"} />
+                                                                <InfoTile label="Activities" value={selectedDay.activities?.length || 0} />
+                                                                <InfoTile label="Activity time" value={fmtMinutes(selectedDay.totalActivityMinutes)} />
+                                                                <InfoTile label="Walking" value={fmtMinutes(selectedDay.totalWalkingMinutes)} />
+                                                            </div>
+
+                                                            <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+                                                                <div className="space-y-4">
+                                                                    {["MORNING", "AFTERNOON", "EVENING", "OTHER"].map((slot) => {
+                                                                        const items = groupedActivities[slot] || [];
+                                                                        if (!items.length) return null;
+
+                                                                        return (
+                                                                            <div key={slot} className="rounded-2xl bg-white/10 p-4">
+                                                                                <div className="mb-3 text-sm font-semibold text-white">
+                                                                                    {normalizeSlotLabel(slot)}
+                                                                                </div>
+
+                                                                                <div className="space-y-3">
+                                                                                    {items.map((activity, idx) => (
+                                                                                        <div
+                                                                                            key={`${slot}-${idx}-${activity.name}`}
+                                                                                            className="rounded-2xl border border-white/10 bg-white/10 p-4"
+                                                                                        >
+                                                                                            <div className="mb-3 flex items-start gap-3">
+                                                                                                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/15 text-lg">
+                                                                                                    {activityEmoji(activity.type)}
+                                                                                                </div>
+
+                                                                                                <div className="flex-1">
+                                                                                                    <div className="text-sm font-bold text-white">
+                                                                                                        {displayValue(activity.name, "Activity")}
+                                                                                                    </div>
+                                                                                                    <div className="text-xs text-white/55">
+                                                                                                        {activityTypeText(activity.type)}
+                                                                                                    </div>
+                                                                                                </div>
+
+                                                                                                {activity.optional ? <Badge tone="yellow">Optional</Badge> : null}
+                                                                                            </div>
+
+                                                                                            <div className="text-sm leading-6 text-white/75">
+                                                                                                {displayValue(activity.description)}
+                                                                                            </div>
+
+                                                                                            <div className="mt-3 flex flex-wrap gap-3 text-xs text-white/55">
+                                                                                                {activity.estimatedMinutes ? (
+                                                                                                    <span>⏱ {fmtMinutes(activity.estimatedMinutes)}</span>
+                                                                                                ) : null}
+
+                                                                                                {activity.zoneName ? (
+                                                                                                    <span>📍 {activity.zoneName}</span>
+                                                                                                ) : null}
+
+                                                                                                {activity.timeSlot ? (
+                                                                                                    <span>🕒 {activity.timeSlot}</span>
+                                                                                                ) : null}
+                                                                                            </div>
+
+                                                                                            <div className="mt-2 text-xs text-white/40">
+                                                                                                lat: {fmtCoord(activity.lat)} | lng: {fmtCoord(activity.lng)}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+
+                                                                <div className="min-h-[420px] overflow-hidden rounded-[28px] border border-white/10 bg-white/10">
+                                                                    <TripItineraryMap day={selectedDay} />
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ) : null}
+                                            </div>
+
+                                            <div className="flex xl:block">
+                                                <HeroButton
+                                                    className="border-rose-300/30 bg-rose-500/10 text-rose-100 hover:bg-rose-500/20"
+                                                    onClick={() => handleDelete(p.id)}
+                                                    disabled={deletingId === p.id}
+                                                    type="button"
+                                                >
+                                                    {deletingId === p.id ? "Deleting..." : "Delete"}
+                                                </HeroButton>
+                                            </div>
+                                        </div>
+                                    </GlassSection>
+                                );
+                            })}
+                        </div>
+                    ) : null}
+                </div>
+            </section>
+
+            <PlanDetailsModal
+                plan={detailsPlan}
+                onClose={() => setDetailsPlan(null)}
+            />
+        </div>
+    );
+}
