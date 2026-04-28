@@ -11,7 +11,7 @@ import tripmindai.com.mk.maintravelservice.dto.trip.TripItineraryDto;
 import tripmindai.com.mk.maintravelservice.model.TripPlan;
 import tripmindai.com.mk.maintravelservice.repository.TripPlanRepository;
 import tripmindai.com.mk.maintravelservice.service.AI.AiItineraryService;
-import tripmindai.com.mk.maintravelservice.service.GeocodingService;
+import tripmindai.com.mk.maintravelservice.service.geo.GeocodingService;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;

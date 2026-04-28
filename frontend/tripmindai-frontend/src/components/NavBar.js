@@ -62,11 +62,16 @@ export default function NavBar() {
             <div className="mx-auto max-w-[1600px] px-4 lg:px-6">
                 <div className="flex h-20 items-center justify-between">
                     <button onClick={goHome} className="flex items-center gap-3 font-bold">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500 text-sm font-bold text-white shadow-lg">
-                            TM
+                        <div className="flex h-13 w-13 items-center justify-center overflow-hidden">
+                            <img
+                                src="/web-app-manifest-512x512.png"
+                                alt="TripMindAI logo"
+                                className="h-20 w-20 object-contain"
+                            />
                         </div>
-                        <span className={`text-lg ${isDiscover ? "text-white" : "text-slate-900"}`}>
-                            TravelMindAI
+
+                        <span className={`text-lg font-bold ${isDiscover ? "text-white" : "text-slate-900"}`}>
+                            TripMindAI
                         </span>
                     </button>
 
@@ -108,7 +113,7 @@ export default function NavBar() {
 
                                 <Link
                                     to="/register"
-                                    className="px-4 py-2 rounded-xl bg-emerald-500 text-white text-sm hover:bg-emerald-600"
+                                    className="px-4 py-2 rounded-xl bg-white-500 border border-black/10 text-black text-sm border hover:bg-slate-100"
                                 >
                                     Register
                                 </Link>

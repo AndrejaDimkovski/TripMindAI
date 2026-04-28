@@ -1,4 +1,4 @@
-package tripmindai.com.mk.maintravelservice.service;
+package tripmindai.com.mk.maintravelservice.service.geo;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;

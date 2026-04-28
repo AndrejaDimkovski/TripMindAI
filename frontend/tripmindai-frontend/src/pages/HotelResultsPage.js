@@ -81,6 +81,10 @@ function getPlannerRoute(flow) {
     return flow?.mode === "ai" ? "/plan/ai" : "/plan/manual";
 }
 
+function isHotelOnly(flow) {
+    return flow?.tripMode === "HOTEL_ONLY";
+}
+
 function priceAmount(item) {
     const n = Number(
         item?.convertedTotalWithTaxes ??
@@ -217,7 +221,7 @@ export default function HotelResultsPage() {
             return;
         }
 
-        if (current?.selectedFlightIndex == null) {
+        if (!isHotelOnly(current) && current?.selectedFlightIndex == null) {
             navigate("/plan/flights", { replace: true });
             return;
         }
@@ -240,9 +244,15 @@ export default function HotelResultsPage() {
     const offers = useMemo(() => safeArray(searchResult?.hotelOffers), [searchResult]);
     const searchForm = flow?.searchForm || {};
     const currency = searchForm?.targetCurrency || "EUR";
+    const hotelOnly = isHotelOnly(flow);
 
     const destinationName = flow?.destination?.name || "Destination";
     const countryName = flow?.country?.name || "";
+
+    const hotelsServiceAvailable = flow?.searchResult?.hotelsServiceAvailable !== false;
+    const hotelsMessage =
+        flow?.searchResult?.hotelsMessage ||
+        "Hotel service is temporarily unavailable. Please try again later.";
 
     const selectedFlight = useMemo(() => {
         if (!flow || flow.selectedFlightIndex == null) return null;
@@ -285,19 +295,21 @@ export default function HotelResultsPage() {
     }, [selectedHotelOffers]);
 
     const estimatedTotal = useMemo(() => {
-        const flightPrice = Number(
-            selectedFlight?.convertedTotalWithTaxes ??
-            selectedFlight?.convertedTotalPrice ??
-            selectedFlight?.totalWithTaxes ??
-            selectedFlight?.totalPrice ??
-            0
-        );
+        const flightPrice = hotelOnly
+            ? 0
+            : Number(
+                selectedFlight?.convertedTotalWithTaxes ??
+                selectedFlight?.convertedTotalPrice ??
+                selectedFlight?.totalWithTaxes ??
+                selectedFlight?.totalPrice ??
+                0
+            );
 
         const hotelPrice = priceAmount(selectedHotelOffer);
         const sum = flightPrice + hotelPrice;
 
         return Number.isFinite(sum) ? sum : 0;
-    }, [selectedFlight, selectedHotelOffer]);
+    }, [hotelOnly, selectedFlight, selectedHotelOffer]);
 
     const nights = calculateNights(searchForm?.from, searchForm?.to);
 
@@ -317,7 +329,7 @@ export default function HotelResultsPage() {
     }
 
     function goBack() {
-        navigate("/plan/flights");
+        navigate(hotelOnly ? getPlannerRoute(flow) : "/plan/flights");
     }
 
     function goHotelDetails(hotel) {
@@ -378,8 +390,16 @@ export default function HotelResultsPage() {
                                 {countryName ? `, ${countryName}` : ""} and continue to booking summary.
                             </p>
 
+                            <div className="mt-5 flex flex-wrap gap-2">
+                                <Badge tone="yellow">{hotelOnly ? "Hotel only" : "Flight + Hotel"}</Badge>
+                                <Badge tone="blue">{destinationName}</Badge>
+                                {countryName ? <Badge tone="light">{countryName}</Badge> : null}
+                            </div>
+
                             <div className="mt-8 flex flex-wrap gap-4">
-                                <HeroButton onClick={goBack}>← Back to flights</HeroButton>
+                                <HeroButton onClick={goBack}>
+                                    ← {hotelOnly ? "Back to planner" : "Back to flights"}
+                                </HeroButton>
 
                                 <HeroButton
                                     primary
@@ -396,7 +416,7 @@ export default function HotelResultsPage() {
                                 <div className="mb-5">
                                     <div className="text-2xl font-bold text-white">Search summary</div>
                                     <div className="mt-1 text-sm text-white/70">
-                                        Route, stay and selected flight overview
+                                        {hotelOnly ? "Stay and hotel overview" : "Route, stay and selected flight overview"}
                                     </div>
                                 </div>
 
@@ -410,6 +430,19 @@ export default function HotelResultsPage() {
                                     <InfoTile label="Currency" value={currency} />
                                 </div>
 
+                                {selectedFlight && !hotelOnly ? (
+                                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                                        <InfoTile
+                                            label="Flight route"
+                                            value={`${displayValue(selectedFlight?.originIata)} → ${displayValue(selectedFlight?.destIata)}`}
+                                        />
+                                        <InfoTile
+                                            label="Airline"
+                                            value={selectedFlight?.airlineName || selectedFlight?.airlineCode || "—"}
+                                        />
+                                    </div>
+                                ) : null}
+
                                 {selectedHotelOffer ? (
                                     <div className="mt-5 rounded-2xl border border-emerald-300/20 bg-emerald-500/20 p-4">
                                         <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">
@@ -420,191 +453,215 @@ export default function HotelResultsPage() {
                                         </div>
                                     </div>
                                 ) : null}
+
+                                <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-500/15 p-4">
+                                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-100">
+                                        Price notice
+                                    </div>
+                                    <div className="mt-2 text-sm leading-6 text-white/80">
+                                        Displayed hotel prices are indicative and may differ from the final provider offer at booking time.
+                                    </div>
+                                </div>
                             </GlassPanel>
                         </div>
                     </div>
 
-                    <div className="mt-10 grid gap-6 lg:grid-cols-[1.12fr_0.88fr]">
-                        <div className="space-y-5">
-                            {hotels.map((hotel, index) => {
-                                const hotelOffers = offersByHotelId.get(hotel.hotelId) || [];
-                                const cheapest = hotelOffers[0] || null;
-                                const isSelected = selectedHotelIndex === index;
-                                const review = reviewText(hotel);
-                                const nightly = nightlyPriceText(cheapest, currency);
-                                const taxes = taxText(cheapest, currency);
-                                const refund = refundText(cheapest);
+                    {hotels.length === 0 ? (
+                        <div className="mt-10">
+                            <GlassPanel className="p-6 text-white lg:p-8">
+                                <h2 className="text-2xl font-bold text-white">
+                                    {hotelsServiceAvailable ? "No hotels found" : "Hotel service unavailable"}
+                                </h2>
+                                <p className="mt-2 text-sm text-white/70">
+                                    {hotelsServiceAvailable
+                                        ? "No hotels were returned for this search. Try another destination, dates, or filter combination."
+                                        : hotelsMessage}
+                                </p>
 
-                                return (
-                                    <div
-                                        key={hotel.hotelId || index}
-                                        className={`rounded-[28px] border p-5 transition ${
-                                            isSelected
-                                                ? "border-emerald-300/30 bg-emerald-500/20 shadow-2xl"
-                                                : "border-white/10 bg-white/10 hover:bg-white/15"
-                                        }`}
-                                    >
-                                        <div className="grid gap-5 xl:grid-cols-[260px_1fr]">
-                                            <div className="overflow-hidden rounded-2xl bg-white/10">
-                                                {hotel?.photoUrl ? (
-                                                    <img
-                                                        src={hotel.photoUrl}
-                                                        alt={hotel?.name || "Hotel"}
-                                                        className="h-60 w-full object-cover xl:h-full"
-                                                        loading="lazy"
-                                                    />
-                                                ) : (
-                                                    <div className="flex h-60 w-full items-center justify-center text-sm text-white/60">
-                                                        No image
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            <div className="flex flex-col justify-between">
-                                                <div>
-                                                    <div className="flex flex-wrap items-center gap-2">
-                                                        <Badge tone={isSelected ? "green" : "light"}>
-                                                            {isSelected ? "Selected" : "Hotel"}
-                                                        </Badge>
-
-                                                        {review ? <Badge tone="blue">{review}</Badge> : null}
-                                                        {refund ? <Badge tone="yellow">{refund}</Badge> : null}
-                                                        {cheapest?.boardType ? (
-                                                            <Badge tone="light">{cheapest.boardType}</Badge>
-                                                        ) : null}
-                                                    </div>
-
-                                                    <div className="mt-4 text-3xl font-bold text-white">
-                                                        {hotel?.name || "Unnamed hotel"}
-                                                    </div>
-
-                                                    <div className="mt-2 text-sm text-white/70">
-                                                        {[hotel?.address, hotel?.city, hotel?.country].filter(Boolean).join(", ") || "Location unavailable"}
-                                                    </div>
-
-                                                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                                                        <InfoTile
-                                                            label="Offers"
-                                                            value={
-                                                                hotelOffers.length > 0
-                                                                    ? `${hotelOffers.length} available`
-                                                                    : "No offers grouped"
-                                                            }
-                                                        />
-                                                        <InfoTile
-                                                            label="Stay"
-                                                            value={nights ? `${nights} night${nights > 1 ? "s" : ""}` : "—"}
-                                                        />
-                                                    </div>
-                                                </div>
-
-                                                <div className="mt-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                                                    <div>
-                                                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">
-                                                            Best price
-                                                        </div>
-                                                        <div className="mt-2 text-3xl font-bold text-white">
-                                                            {priceText(cheapest, currency)}
-                                                        </div>
-                                                        {nightly ? (
-                                                            <div className="mt-1 text-sm text-white/70">{nightly}</div>
-                                                        ) : null}
-                                                        {taxes ? (
-                                                            <div className="mt-1 text-sm text-white/70">Taxes: {taxes}</div>
-                                                        ) : null}
-                                                    </div>
-
-                                                    <div className="flex flex-wrap gap-3">
-                                                        <HeroButton
-                                                            type="button"
-                                                            onClick={() => handleSelectHotel(index)}
-                                                            primary={isSelected}
-                                                            className="px-5 py-3 text-sm"
-                                                        >
-                                                            {isSelected ? "Selected" : "Select"}
-                                                        </HeroButton>
-
-                                                        <HeroButton
-                                                            type="button"
-                                                            onClick={() => goHotelDetails(hotel)}
-                                                            className="px-5 py-3 text-sm"
-                                                        >
-                                                            View details
-                                                        </HeroButton>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-
-                            {hotels.length === 0 ? (
-                                <div className="rounded-2xl border border-white/10 bg-white/10 px-5 py-6 text-white/75">
-                                    No hotels found.
+                                <div className="mt-5">
+                                    <HeroButton onClick={goBack}>
+                                        {hotelOnly ? "Back to planner" : "Back to flights"}
+                                    </HeroButton>
                                 </div>
-                            ) : null}
+                            </GlassPanel>
                         </div>
+                    ) : (
+                        <div className="mt-10 grid gap-6 lg:grid-cols-[1.12fr_0.88fr]">
+                            <div className="space-y-5">
+                                {hotels.map((hotel, index) => {
+                                    const hotelOffers = offersByHotelId.get(hotel.hotelId) || [];
+                                    const cheapest = hotelOffers[0] || null;
+                                    const isSelected = selectedHotelIndex === index;
+                                    const review = reviewText(hotel);
+                                    const nightly = nightlyPriceText(cheapest, currency);
+                                    const taxes = taxText(cheapest, currency);
+                                    const refund = refundText(cheapest);
 
-                        <aside>
-                            <div className="space-y-6 lg:sticky lg:top-24">
-                                <GlassPanel className="p-6 text-white">
-                                    <div className="mb-5">
-                                        <div className="text-xl font-bold text-white">Selected hotel</div>
-                                        <div className="mt-1 text-sm text-white/70">
-                                            Review the option you picked before continuing
+                                    return (
+                                        <div
+                                            key={hotel.hotelId || index}
+                                            className={`rounded-[28px] border p-5 transition ${
+                                                isSelected
+                                                    ? "border-emerald-300/30 bg-emerald-500/20 shadow-2xl"
+                                                    : "border-white/10 bg-white/10 hover:bg-white/15"
+                                            }`}
+                                        >
+                                            <div className="grid gap-5 xl:grid-cols-[260px_1fr]">
+                                                <div className="overflow-hidden rounded-2xl bg-white/10">
+                                                    {hotel?.photoUrl ? (
+                                                        <img
+                                                            src={hotel.photoUrl}
+                                                            alt={hotel?.name || "Hotel"}
+                                                            className="h-60 w-full object-cover xl:h-full"
+                                                            loading="lazy"
+                                                        />
+                                                    ) : (
+                                                        <div className="flex h-60 w-full items-center justify-center text-sm text-white/60">
+                                                            No image
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex flex-col justify-between">
+                                                    <div>
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <Badge tone={isSelected ? "green" : "light"}>
+                                                                {isSelected ? "Selected" : "Hotel"}
+                                                            </Badge>
+
+                                                            {review ? <Badge tone="blue">{review}</Badge> : null}
+                                                            {refund ? <Badge tone="yellow">{refund}</Badge> : null}
+                                                            {cheapest?.boardType ? (
+                                                                <Badge tone="light">{cheapest.boardType}</Badge>
+                                                            ) : null}
+                                                        </div>
+
+                                                        <div className="mt-4 text-3xl font-bold text-white">
+                                                            {hotel?.name || "Unnamed hotel"}
+                                                        </div>
+
+                                                        <div className="mt-2 text-sm text-white/70">
+                                                            {[hotel?.address, hotel?.city, hotel?.country].filter(Boolean).join(", ") || "Location unavailable"}
+                                                        </div>
+
+                                                        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                                                            <InfoTile
+                                                                label="Offers"
+                                                                value={
+                                                                    hotelOffers.length > 0
+                                                                        ? `${hotelOffers.length} available`
+                                                                        : "No offers grouped"
+                                                                }
+                                                            />
+                                                            <InfoTile
+                                                                label="Stay"
+                                                                value={nights ? `${nights} night${nights > 1 ? "s" : ""}` : "—"}
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="mt-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                                                        <div>
+                                                            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">
+                                                                Best price
+                                                            </div>
+                                                            <div className="mt-2 text-3xl font-bold text-white">
+                                                                {priceText(cheapest, currency)}
+                                                            </div>
+                                                            {nightly ? (
+                                                                <div className="mt-1 text-sm text-white/70">{nightly}</div>
+                                                            ) : null}
+                                                            {taxes ? (
+                                                                <div className="mt-1 text-sm text-white/70">Taxes: {taxes}</div>
+                                                            ) : null}
+                                                        </div>
+
+                                                        <div className="flex flex-wrap gap-3">
+                                                            <HeroButton
+                                                                type="button"
+                                                                onClick={() => handleSelectHotel(index)}
+                                                                primary={isSelected}
+                                                                className="px-5 py-3 text-sm"
+                                                            >
+                                                                {isSelected ? "Selected" : "Select"}
+                                                            </HeroButton>
+
+                                                            <HeroButton
+                                                                type="button"
+                                                                onClick={() => goHotelDetails(hotel)}
+                                                                className="px-5 py-3 text-sm"
+                                                            >
+                                                                View details
+                                                            </HeroButton>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-
-                                    {!selectedHotel ? (
-                                        <div className="rounded-2xl bg-white/10 p-4 text-white/75">
-                                            Select a hotel to continue.
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <div className="flex flex-wrap gap-2">
-                                                <Badge tone="green">Ready</Badge>
-                                                {reviewText(selectedHotel) ? (
-                                                    <Badge tone="blue">{reviewText(selectedHotel)}</Badge>
-                                                ) : null}
-                                                {refundText(selectedHotelOffer) ? (
-                                                    <Badge tone="yellow">{refundText(selectedHotelOffer)}</Badge>
-                                                ) : null}
-                                            </div>
-
-                                            <div className="mt-4 space-y-3">
-                                                <InfoTile label="Hotel" value={selectedHotel?.name || "—"} />
-                                                <InfoTile
-                                                    label="Location"
-                                                    value={[selectedHotel?.address, selectedHotel?.city, selectedHotel?.country].filter(Boolean).join(", ") || "—"}
-                                                />
-                                                <InfoTile label="Price" value={priceText(selectedHotelOffer, currency)} />
-                                                <InfoTile label="Nightly" value={nightlyPriceText(selectedHotelOffer, currency) || "—"} />
-                                                <InfoTile
-                                                    label="Dates"
-                                                    value={`${formatDateDisplay(searchForm?.from)} → ${formatDateDisplay(searchForm?.to)}`}
-                                                />
-                                            </div>
-
-                                            <div className="mt-5 flex flex-col gap-3">
-                                                <HeroButton onClick={() => goHotelDetails(selectedHotel)}>
-                                                    View full details
-                                                </HeroButton>
-
-                                                <HeroButton
-                                                    primary
-                                                    onClick={continueToSummary}
-                                                    disabled={selectedHotelIndex == null}
-                                                >
-                                                    Continue to summary
-                                                </HeroButton>
-                                            </div>
-                                        </>
-                                    )}
-                                </GlassPanel>
+                                    );
+                                })}
                             </div>
-                        </aside>
-                    </div>
+
+                            <aside>
+                                <div className="space-y-6 lg:sticky lg:top-24">
+                                    <GlassPanel className="p-6 text-white">
+                                        <div className="mb-5">
+                                            <div className="text-xl font-bold text-white">Selected hotel</div>
+                                            <div className="mt-1 text-sm text-white/70">
+                                                Review the option you picked before continuing
+                                            </div>
+                                        </div>
+
+                                        {!selectedHotel ? (
+                                            <div className="rounded-2xl bg-white/10 p-4 text-white/75">
+                                                Select a hotel to continue.
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className="flex flex-wrap gap-2">
+                                                    <Badge tone="green">Ready</Badge>
+                                                    {reviewText(selectedHotel) ? (
+                                                        <Badge tone="blue">{reviewText(selectedHotel)}</Badge>
+                                                    ) : null}
+                                                    {refundText(selectedHotelOffer) ? (
+                                                        <Badge tone="yellow">{refundText(selectedHotelOffer)}</Badge>
+                                                    ) : null}
+                                                </div>
+
+                                                <div className="mt-4 space-y-3">
+                                                    <InfoTile label="Hotel" value={selectedHotel?.name || "—"} />
+                                                    <InfoTile
+                                                        label="Location"
+                                                        value={[selectedHotel?.address, selectedHotel?.city, selectedHotel?.country].filter(Boolean).join(", ") || "—"}
+                                                    />
+                                                    <InfoTile label="Price" value={priceText(selectedHotelOffer, currency)} />
+                                                    <InfoTile label="Nightly" value={nightlyPriceText(selectedHotelOffer, currency) || "—"} />
+                                                    <InfoTile
+                                                        label="Dates"
+                                                        value={`${formatDateDisplay(searchForm?.from)} → ${formatDateDisplay(searchForm?.to)}`}
+                                                    />
+                                                </div>
+
+                                                <div className="mt-5 flex flex-col gap-3">
+                                                    <HeroButton onClick={() => goHotelDetails(selectedHotel)}>
+                                                        View full details
+                                                    </HeroButton>
+
+                                                    <HeroButton
+                                                        primary
+                                                        onClick={continueToSummary}
+                                                        disabled={selectedHotelIndex == null}
+                                                    >
+                                                        Continue to summary
+                                                    </HeroButton>
+                                                </div>
+                                            </>
+                                        )}
+                                    </GlassPanel>
+                                </div>
+                            </aside>
+                        </div>
+                    )}
                 </div>
             </section>
         </div>

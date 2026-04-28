@@ -1,4 +1,4 @@
-package tripmindai.com.mk.maintravelservice.web;
+package tripmindai.com.mk.maintravelservice.web.auth;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;

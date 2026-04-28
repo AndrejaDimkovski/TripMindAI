@@ -3,6 +3,7 @@ package tripmindai.com.mk.maintravelservice.service.AI;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
@@ -31,9 +32,22 @@ public class AzureOpenAiClient {
     }
 
     public String chatJson(String systemPrompt, String userPrompt) {
-        String url = endpoint
-                + "/openai/deployments/" + deployment
-                + "/chat/completions?api-version=" + apiVersion;
+        String cleanEndpoint = safe(endpoint);
+        if (cleanEndpoint.endsWith("/")) {
+            cleanEndpoint = cleanEndpoint.substring(0, cleanEndpoint.length() - 1);
+        }
+
+        String cleanDeployment = safe(deployment);
+        String cleanApiVersion = safe(apiVersion);
+
+        String url = cleanEndpoint
+                + "/openai/deployments/" + cleanDeployment
+                + "/chat/completions?api-version=" + cleanApiVersion;
+
+        System.out.println("AzureOpenAiClient endpoint = " + cleanEndpoint);
+        System.out.println("AzureOpenAiClient deployment = " + cleanDeployment);
+        System.out.println("AzureOpenAiClient apiVersion = " + cleanApiVersion);
+        System.out.println("AzureOpenAiClient apiKey present = " + (apiKey != null && !apiKey.isBlank()));
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("temperature", 0.2);
@@ -50,7 +64,7 @@ public class AzureOpenAiClient {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("api-key", apiKey);
+        headers.set("api-key", safe(apiKey));
 
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
 
@@ -101,6 +115,10 @@ public class AzureOpenAiClient {
 
             return content;
 
+        } catch (HttpStatusCodeException e) {
+            System.out.println("AzureOpenAiClient HTTP status = " + e.getStatusCode());
+            System.out.println("AzureOpenAiClient response body = " + e.getResponseBodyAsString());
+            return null;
         } catch (ResourceAccessException e) {
             System.out.println("AzureOpenAiClient timeout/access error: " + e.getMessage());
             return null;

@@ -359,6 +359,12 @@ public final class TravelPromptMappings {
             Map.entry("me and friend", 2),
             Map.entry("me and my girlfriend", 2),
             Map.entry("me and my boyfriend", 2),
+            Map.entry("me and my wife", 2),
+            Map.entry("me and my husband", 2),
+            Map.entry("we are two", 2),
+            Map.entry("we are 2", 2),
+            Map.entry("2 adults", 2),
+            Map.entry("two adults", 2),
 
             Map.entry("for three", 3),
             Map.entry("three people", 3),
@@ -366,15 +372,67 @@ public final class TravelPromptMappings {
             Map.entry("тројца", 3),
             Map.entry("за тројца", 3),
             Map.entry("friends", 3),
+            Map.entry("3 adults", 3),
+            Map.entry("three adults", 3),
 
             Map.entry("for four", 4),
             Map.entry("four people", 4),
             Map.entry("four persons", 4),
             Map.entry("четворица", 4),
             Map.entry("за четворица", 4),
+            Map.entry("4 adults", 4),
+            Map.entry("four adults", 4),
 
             Map.entry("family", 3),
             Map.entry("семејство", 3)
+    );
+
+    public static final Map<String, Integer> DURATION_KEYWORDS = Map.ofEntries(
+            Map.entry("one day", 1),
+            Map.entry("1 day", 1),
+            Map.entry("еден ден", 1),
+
+            Map.entry("two days", 2),
+            Map.entry("2 days", 2),
+            Map.entry("two nights", 2),
+            Map.entry("2 nights", 2),
+            Map.entry("два дена", 2),
+            Map.entry("две ноќи", 2),
+
+            Map.entry("three days", 3),
+            Map.entry("3 days", 3),
+            Map.entry("three nights", 3),
+            Map.entry("3 nights", 3),
+
+            Map.entry("four days", 4),
+            Map.entry("4 days", 4),
+            Map.entry("four nights", 4),
+            Map.entry("4 nights", 4),
+
+            Map.entry("five days", 5),
+            Map.entry("5 days", 5),
+            Map.entry("five nights", 5),
+            Map.entry("5 nights", 5),
+
+            Map.entry("six days", 6),
+            Map.entry("6 days", 6),
+            Map.entry("six nights", 6),
+            Map.entry("6 nights", 6),
+
+            Map.entry("seven days", 7),
+            Map.entry("7 days", 7),
+            Map.entry("seven nights", 7),
+            Map.entry("7 nights", 7),
+            Map.entry("one week", 7),
+            Map.entry("a week", 7),
+            Map.entry("една недела", 7),
+
+            Map.entry("ten days", 10),
+            Map.entry("10 days", 10),
+
+            Map.entry("two weeks", 14),
+            Map.entry("2 weeks", 14),
+            Map.entry("две недели", 14)
     );
 
     public static final Map<String, List<String>> REGION_DEFAULT_CODES = Map.ofEntries(

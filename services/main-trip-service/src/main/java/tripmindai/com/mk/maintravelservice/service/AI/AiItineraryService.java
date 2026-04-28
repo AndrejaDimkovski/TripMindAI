@@ -49,6 +49,8 @@ public class AiItineraryService {
             - last day should be lighter
             - descriptions max 6 words
             - keep JSON compact
+            - DO NOT generate sightseeing activities for the checkout / return-travel day
+            - the last itinerary day must be the day before checkout / return travel
             """;
 
     private final AzureOpenAiClient azureClient;
@@ -66,19 +68,28 @@ public class AiItineraryService {
             LocalDate to,
             int adults
     ) {
+        LocalDate safeFrom = from != null ? from : LocalDate.now().plusDays(1);
+        LocalDate safeTo = to != null ? to : safeFrom.plusDays(1);
+        LocalDate itineraryEnd = resolveItineraryEnd(safeFrom, safeTo);
+
         String userPrompt = """
                 Create a compact multi-day travel itinerary.
 
                 City: %s
                 Country: %s
-                From: %s
-                To: %s
+                Arrival date: %s
+                Checkout / return flight date: %s
+                Generate itinerary days only from %s to %s.
+                Important: %s is a departure day, so do not include activities for that date.
                 Travelers: %d
                 """.formatted(
                 safe(destination),
                 safe(country),
-                from,
-                to,
+                safeFrom,
+                safeTo,
+                safeFrom,
+                itineraryEnd,
+                safeTo,
                 adults
         );
 
@@ -88,10 +99,35 @@ public class AiItineraryService {
                 return null;
             }
 
-            return objectMapper.readValue(rawJson, AiItineraryResponse.class);
+            AiItineraryResponse parsed = objectMapper.readValue(rawJson, AiItineraryResponse.class);
+            return trimCheckoutDay(parsed, safeTo);
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private AiItineraryResponse trimCheckoutDay(AiItineraryResponse response, LocalDate checkoutDate) {
+        if (response == null || response.days() == null || checkoutDate == null) {
+            return response;
+        }
+
+        var filteredDays = response.days().stream()
+                .filter(day -> day != null && day.date() != null)
+                .filter(day -> {
+                    try {
+                        return LocalDate.parse(day.date()).isBefore(checkoutDate);
+                    } catch (Exception e) {
+                        return true;
+                    }
+                })
+                .toList();
+
+        return new AiItineraryResponse(response.title(), filteredDays);
+    }
+
+    private LocalDate resolveItineraryEnd(LocalDate from, LocalDate to) {
+        LocalDate candidate = to.minusDays(1);
+        return candidate.isBefore(from) ? from : candidate;
     }
 
     private String safe(String value) {

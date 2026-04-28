@@ -93,6 +93,20 @@ function minutesText(minutes) {
     return `${m}m`;
 }
 
+function getSegmentLabel(segmentIndex, totalSegments, tripType) {
+    if (tripType === "ROUND_TRIP" || totalSegments > 1) {
+        if (segmentIndex === 0) return "Outbound";
+        if (segmentIndex === 1) return "Return";
+    }
+
+    return "Journey";
+}
+
+function getStopoverLabel(legIndex, totalLegs, leg) {
+    if (legIndex === totalLegs - 1) return null;
+    return leg?.arrivalCity || leg?.arrivalAirportCode || "Stopover";
+}
+
 function HeroPill({ children }) {
     return (
         <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-white/90 backdrop-blur">
@@ -118,7 +132,7 @@ function HeroButton({ children, primary = false, className = "", ...props }) {
 
 function GlassPanel({ children, className = "" }) {
     return (
-        <div className={`rounded-[28px] border border-white/10 bg-white/10 backdrop-blur-xl shadow-2xl ${className}`}>
+        <div className={`rounded-[28px] border border-white/10 bg-white/10 shadow-2xl backdrop-blur-xl ${className}`}>
             {children}
         </div>
     );
@@ -243,85 +257,83 @@ export default function FlightDetailsPage() {
                 <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,14,20,0.84)_0%,rgba(8,18,28,0.62)_36%,rgba(8,18,28,0.32)_68%,rgba(8,18,28,0.26)_100%)]" />
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.14),transparent_28%)]" />
 
-                <div className="relative z-10 mx-auto max-w-[1500px] px-4 pb-16 pt-28 lg:px-6">
-                    <div className="grid items-start gap-8 xl:grid-cols-[1.1fr_0.9fr]">
-                        <div className="pt-6 lg:pt-10">
-                            <HeroPill>Flight details</HeroPill>
+                <div className="relative z-10 mx-auto max-w-[1400px] px-4 pb-16 pt-28 lg:px-6">
+                    <div className="pt-6 lg:pt-10">
+                        <HeroPill>Flight details</HeroPill>
 
-                            <h1 className="mt-8 text-5xl font-extrabold uppercase leading-none text-white md:text-6xl xl:text-[5.3rem]">
-                                View
-                                <br />
-                                Flight
-                            </h1>
+                        <h1 className="mt-8 text-5xl font-extrabold uppercase leading-none text-white md:text-6xl xl:text-[5.3rem]">
+                            View
+                            <br />
+                            Flight
+                        </h1>
 
-                            <p className="mt-5 max-w-2xl text-sm leading-7 text-white/85 md:text-base">
-                                Review detailed flight segments, schedule, carrier and fare information before continuing.
-                            </p>
+                        <p className="mt-5 max-w-2xl text-sm leading-7 text-white/85 md:text-base">
+                            Review detailed flight segments, schedule, carrier and stopover information before continuing.
+                        </p>
 
-                            <div className="mt-5 flex flex-wrap gap-2">
-                                <Badge tone="green">{formatTripType(selectedFlight?.tripType)}</Badge>
-                                <Badge tone="blue">{formatStops(selectedFlight?.stops)}</Badge>
-                                {selectedFlight?.airlineCode ? (
-                                    <Badge tone="light">{selectedFlight.airlineCode}</Badge>
-                                ) : null}
-                            </div>
-
-                            <div className="mt-8 flex flex-wrap gap-4">
-                                <HeroButton onClick={goBack}>
-                                    ← Back
-                                </HeroButton>
-
-                                <HeroButton
-                                    primary
-                                    onClick={continueToHotels}
-                                    disabled={!selectedFlight}
-                                >
-                                    Continue to hotels
-                                </HeroButton>
-                            </div>
+                        <div className="mt-5 flex flex-wrap gap-2">
+                            <Badge tone="green">{formatTripType(selectedFlight?.tripType)}</Badge>
+                            <Badge tone="blue">{formatStops(selectedFlight?.stops)}</Badge>
+                            {selectedFlight?.airlineCode ? (
+                                <Badge tone="light">{selectedFlight.airlineCode}</Badge>
+                            ) : null}
                         </div>
 
-                        <div className="w-full max-w-[520px] justify-self-end">
-                            <GlassPanel className="p-6 text-white">
-                                <div className="mb-5">
-                                    <div className="text-2xl font-bold text-white">Selected flight</div>
-                                    <div className="mt-1 text-sm text-white/70">
-                                        Basic info from your chosen offer
-                                    </div>
+                        <div className="mt-8 flex flex-wrap gap-4">
+                            <HeroButton onClick={goBack}>
+                                ← Back
+                            </HeroButton>
+
+                            <HeroButton
+                                primary
+                                onClick={continueToHotels}
+                                disabled={!selectedFlight}
+                            >
+                                Continue to hotels
+                            </HeroButton>
+                        </div>
+                    </div>
+
+                    <div className="mt-8">
+                        <GlassPanel className="p-6 text-white">
+                            <div className="mb-5">
+                                <div className="text-2xl font-bold text-white">Selected flight</div>
+                                <div className="mt-1 text-sm text-white/70">
+                                    Basic summary of your chosen offer
                                 </div>
+                            </div>
 
-                                {!selectedFlight ? (
-                                    <div className="rounded-2xl bg-white/10 p-4 text-white/75">
-                                        No selected flight.
-                                    </div>
-                                ) : (
-                                    <div className="space-y-4">
+                            {!selectedFlight ? (
+                                <div className="rounded-2xl bg-white/10 p-4 text-white/75">
+                                    No selected flight.
+                                </div>
+                            ) : (
+                                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                                    <InfoTile
+                                        label="Route"
+                                        value={`${displayValue(selectedFlight?.originIata)} → ${displayValue(selectedFlight?.destIata)}`}
+                                    />
+                                    <InfoTile
+                                        label="Outbound"
+                                        value={`${formatDateTime(selectedFlight?.departureAt)} → ${formatDateTime(selectedFlight?.arrivalAt)}`}
+                                    />
+                                    {selectedFlight?.returnDepartureAt || selectedFlight?.returnArrivalAt ? (
                                         <InfoTile
-                                            label="Route"
-                                            value={`${displayValue(selectedFlight?.originIata)} → ${displayValue(selectedFlight?.destIata)}`}
+                                            label="Return"
+                                            value={`${formatDateTime(selectedFlight?.returnDepartureAt)} → ${formatDateTime(selectedFlight?.returnArrivalAt)}`}
                                         />
-                                        <InfoTile
-                                            label="Outbound"
-                                            value={`${formatDateTime(selectedFlight?.departureAt)} → ${formatDateTime(selectedFlight?.arrivalAt)}`}
-                                        />
-                                        {selectedFlight?.returnDepartureAt || selectedFlight?.returnArrivalAt ? (
-                                            <InfoTile
-                                                label="Return"
-                                                value={`${formatDateTime(selectedFlight?.returnDepartureAt)} → ${formatDateTime(selectedFlight?.returnArrivalAt)}`}
-                                            />
-                                        ) : null}
-                                        <InfoTile
-                                            label="Airline"
-                                            value={selectedFlight?.airlineName || selectedFlight?.airlineCode}
-                                        />
-                                        <InfoTile
-                                            label="Price"
-                                            value={`${fmtMoney(flightPriceAmount(selectedFlight))} ${flightPriceCurrency(selectedFlight)}`}
-                                        />
-                                    </div>
-                                )}
-                            </GlassPanel>
-                        </div>
+                                    ) : null}
+                                    <InfoTile
+                                        label="Airline"
+                                        value={selectedFlight?.airlineName || selectedFlight?.airlineCode}
+                                    />
+                                    <InfoTile
+                                        label="Price"
+                                        value={`${fmtMoney(flightPriceAmount(selectedFlight))} ${flightPriceCurrency(selectedFlight)}`}
+                                    />
+                                </div>
+                            )}
+                        </GlassPanel>
                     </div>
 
                     {loading ? (
@@ -335,23 +347,32 @@ export default function FlightDetailsPage() {
                     {error ? (
                         <div className="mt-8">
                             <GlassPanel className="p-6 text-white">
-                                ⚠️ {error}
+                                {error}
                             </GlassPanel>
                         </div>
                     ) : null}
 
                     {!loading && !error && details ? (
-                        <div className="mt-8 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-                            <div className="space-y-6">
-                                {detailsSegments.length > 0 ? (
-                                    detailsSegments.map((segment, segmentIndex) => (
+                        <div className="mt-8 space-y-6">
+                            {detailsSegments.length > 0 ? (
+                                detailsSegments.map((segment, segmentIndex) => {
+                                    const segmentLabel = getSegmentLabel(
+                                        segmentIndex,
+                                        detailsSegments.length,
+                                        details?.tripType || selectedFlight?.tripType
+                                    );
+
+                                    const legs = Array.isArray(segment?.legs) ? segment.legs : [];
+
+                                    return (
                                         <GlassPanel
                                             key={`${segment?.departureAirportCode || "SEG"}-${segmentIndex}`}
                                             className="p-6 text-white"
                                         >
                                             <div className="flex flex-wrap items-center gap-2">
-                                                <Badge tone="green">Segment {segmentIndex + 1}</Badge>
+                                                <Badge tone="green">{segmentLabel}</Badge>
                                                 <Badge tone="blue">{minutesText(segment?.totalMinutes)}</Badge>
+                                                <Badge tone="light">{formatStops(legs.length - 1)}</Badge>
                                             </div>
 
                                             <h2 className="mt-4 text-2xl font-bold text-white">
@@ -371,82 +392,60 @@ export default function FlightDetailsPage() {
                                             </div>
 
                                             <div className="mt-5 space-y-4">
-                                                {(Array.isArray(segment?.legs) ? segment.legs : []).map((leg, legIndex) => (
-                                                    <div
-                                                        key={`${leg?.flightNumber || "LEG"}-${legIndex}`}
-                                                        className="rounded-2xl bg-white/10 p-4"
-                                                    >
-                                                        <div className="flex flex-wrap items-center gap-2">
-                                                            <Badge tone="light">Leg {legIndex + 1}</Badge>
-                                                            {leg?.airlineCode ? (
-                                                                <Badge tone="yellow">{leg.airlineCode}</Badge>
-                                                            ) : null}
-                                                            {leg?.flightNumber ? (
-                                                                <Badge tone="blue">Flight {leg.flightNumber}</Badge>
-                                                            ) : null}
-                                                        </div>
+                                                {legs.map((leg, legIndex) => {
+                                                    const stopover = getStopoverLabel(legIndex, legs.length, leg);
 
-                                                        <div className="mt-3 grid gap-3 md:grid-cols-2">
-                                                            <InfoTile
-                                                                label="Route"
-                                                                value={`${displayValue(leg?.departureAirportCode)} → ${displayValue(leg?.arrivalAirportCode)}`}
-                                                            />
-                                                            <InfoTile
-                                                                label="Carrier"
-                                                                value={leg?.airlineName || "Unknown airline"}
-                                                            />
-                                                            <InfoTile
-                                                                label="Schedule"
-                                                                value={`${formatDateTime(leg?.departureTime)} → ${formatDateTime(leg?.arrivalTime)}`}
-                                                            />
-                                                            <InfoTile
-                                                                label="Cabin / Duration"
-                                                                value={`${displayValue(leg?.cabinClass)} · ${minutesText(leg?.totalMinutes)}`}
-                                                            />
+                                                    return (
+                                                        <div
+                                                            key={`${leg?.flightNumber || "LEG"}-${legIndex}`}
+                                                            className="rounded-2xl bg-white/10 p-4"
+                                                        >
+                                                            <div className="flex flex-wrap items-center gap-2">
+                                                                <Badge tone="light">Flight {legIndex + 1}</Badge>
+                                                                {leg?.airlineCode ? (
+                                                                    <Badge tone="yellow">{leg.airlineCode}</Badge>
+                                                                ) : null}
+                                                                {leg?.flightNumber ? (
+                                                                    <Badge tone="blue">{leg.flightNumber}</Badge>
+                                                                ) : null}
+                                                            </div>
+
+                                                            <div className="mt-3 grid gap-3 md:grid-cols-2">
+                                                                <InfoTile
+                                                                    label="Route"
+                                                                    value={`${displayValue(leg?.departureAirportCode)} → ${displayValue(leg?.arrivalAirportCode)}`}
+                                                                />
+                                                                <InfoTile
+                                                                    label="Carrier"
+                                                                    value={leg?.airlineName || "Unknown airline"}
+                                                                />
+                                                                <InfoTile
+                                                                    label="Schedule"
+                                                                    value={`${formatDateTime(leg?.departureTime)} → ${formatDateTime(leg?.arrivalTime)}`}
+                                                                />
+                                                                <InfoTile
+                                                                    label="Cabin / Duration"
+                                                                    value={`${displayValue(leg?.cabinClass)} · ${minutesText(leg?.totalMinutes)}`}
+                                                                />
+                                                            </div>
+
+                                                            {stopover ? (
+                                                                <div className="mt-3">
+                                                                    <Badge tone="dark">Stopover: {stopover}</Badge>
+                                                                </div>
+                                                            ) : null}
                                                         </div>
-                                                    </div>
-                                                ))}
+                                                    );
+                                                })}
                                             </div>
                                         </GlassPanel>
-                                    ))
-                                ) : (
-                                    <GlassPanel className="p-6 text-white">
-                                        No detailed segments available for this flight.
-                                    </GlassPanel>
-                                )}
-                            </div>
-
-                            <aside>
-                                <div className="space-y-6 xl:sticky xl:top-24">
-                                    <GlassPanel className="p-6 text-white">
-                                        <div className="mb-5">
-                                            <div className="text-xl font-bold text-white">Fare overview</div>
-                                            <div className="mt-1 text-sm text-white/70">
-                                                Quick summary from flight details
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-3">
-                                            <InfoTile
-                                                label="Trip type"
-                                                value={formatTripType(details?.tripType || selectedFlight?.tripType)}
-                                            />
-                                            <InfoTile
-                                                label="Fare name"
-                                                value={details?.fareName}
-                                            />
-                                            <InfoTile
-                                                label="Cabin class"
-                                                value={details?.cabinClass}
-                                            />
-                                            <InfoTile
-                                                label="Total"
-                                                value={`${fmtMoney(flightPriceAmount(details || selectedFlight))} ${flightPriceCurrency(details || selectedFlight)}`}
-                                            />
-                                        </div>
-                                    </GlassPanel>
-                                </div>
-                            </aside>
+                                    );
+                                })
+                            ) : (
+                                <GlassPanel className="p-6 text-white">
+                                    No detailed segments available for this flight.
+                                </GlassPanel>
+                            )}
                         </div>
                     ) : null}
                 </div>

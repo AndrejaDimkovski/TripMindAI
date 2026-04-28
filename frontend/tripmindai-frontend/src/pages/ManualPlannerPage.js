@@ -286,6 +286,8 @@ export default function ManualPlannerPage() {
     const [loadingCountries, setLoadingCountries] = useState(true);
     const [loadingSearch, setLoadingSearch] = useState(false);
 
+    const [tripMode, setTripMode] = useState("FLIGHT_HOTEL");
+
     const [error, setError] = useState("");
     const [searchError, setSearchError] = useState("");
 
@@ -319,6 +321,10 @@ export default function ManualPlannerPage() {
 
         try {
             const flow = readFlowState();
+
+            if (flow?.tripMode) {
+                setTripMode(flow.tripMode);
+            }
 
             if (flow?.activeCountryName) {
                 setActiveCountryName(flow.activeCountryName);
@@ -385,6 +391,47 @@ export default function ManualPlannerPage() {
         return resolveOriginToIata(searchForm.origin);
     }, [searchForm.origin]);
 
+    function saveDraft(nextSearchForm, nextTripMode = tripMode, nextDestination = selectedDestination, nextCountry = activeCountry) {
+        const current = readFlowState() || {};
+        saveFlowState({
+            ...current,
+            tripMode: nextTripMode,
+            mode: "manual",
+            activeCountryName,
+            country: nextCountry
+                ? {
+                    id: nextCountry.id ?? null,
+                    code: nextCountry.code || "",
+                    name: nextCountry.name || "",
+                    imageUrl: nextCountry.imageUrl || null,
+                }
+                : null,
+            destination: nextDestination ? normalizeDestination(nextDestination) : null,
+            searchForm: nextSearchForm,
+        });
+    }
+
+    function handleTripModeChange(nextMode) {
+        setTripMode(nextMode);
+        const current = readFlowState() || {};
+        saveFlowState({
+            ...current,
+            tripMode: nextMode,
+            mode: "manual",
+            activeCountryName,
+            country: activeCountry
+                ? {
+                    id: activeCountry.id ?? null,
+                    code: activeCountry.code || "",
+                    name: activeCountry.name || "",
+                    imageUrl: activeCountry.imageUrl || null,
+                }
+                : null,
+            destination: selectedDestination ? normalizeDestination(selectedDestination) : null,
+            searchForm,
+        });
+    }
+
     function validateDates(from, to) {
         const fromIso = normalizeDateToIso(from);
         const toIso = normalizeDateToIso(to);
@@ -441,6 +488,7 @@ export default function ManualPlannerPage() {
         const current = readFlowState() || {};
         saveFlowState({
             ...current,
+            tripMode,
             mode: "manual",
             activeCountryName: nextCountry.name,
             country: {
@@ -464,6 +512,7 @@ export default function ManualPlannerPage() {
         const current = readFlowState() || {};
         saveFlowState({
             ...current,
+            tripMode,
             mode: "manual",
             activeCountryName,
             country: activeCountry
@@ -489,6 +538,7 @@ export default function ManualPlannerPage() {
             const current = readFlowState() || {};
             saveFlowState({
                 ...current,
+                tripMode,
                 mode: "manual",
                 activeCountryName,
                 country: activeCountry
@@ -551,6 +601,7 @@ export default function ManualPlannerPage() {
             const current = readFlowState() || {};
             saveFlowState({
                 ...current,
+                tripMode,
                 mode: "manual",
                 activeCountryName,
                 country: activeCountry
@@ -574,7 +625,7 @@ export default function ManualPlannerPage() {
                 selectedHotelIndex: null,
             });
 
-            navigate("/plan/flights");
+            navigate(tripMode === "HOTEL_ONLY" ? "/plan/hotels" : "/plan/flights");
         } catch (e) {
             setSearchError(e.message || "Search failed.");
         } finally {
@@ -611,9 +662,34 @@ export default function ManualPlannerPage() {
                             </h1>
 
                             <p className="mt-5 max-w-xl text-sm leading-7 text-white/85 md:text-base">
-                                Choose country, destination, dates, guests and filters manually,
-                                then continue directly to flights and hotels.
+                                Choose country, destination, dates, guests and filters manually, then continue directly to{" "}
+                                {tripMode === "HOTEL_ONLY" ? "hotels" : "flights"} and hotels.
                             </p>
+
+                            <div className="mt-5 flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => handleTripModeChange("FLIGHT_HOTEL")}
+                                    className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
+                                        tripMode === "FLIGHT_HOTEL"
+                                            ? "bg-emerald-500 text-white"
+                                            : "bg-white/10 text-white"
+                                    }`}
+                                >
+                                    Flight + Hotel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleTripModeChange("HOTEL_ONLY")}
+                                    className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
+                                        tripMode === "HOTEL_ONLY"
+                                            ? "bg-emerald-500 text-white"
+                                            : "bg-white/10 text-white"
+                                    }`}
+                                >
+                                    Hotel only
+                                </button>
+                            </div>
 
                             <div className="mt-8 flex flex-wrap gap-4">
                                 <HeroButton
@@ -621,7 +697,11 @@ export default function ManualPlannerPage() {
                                     onClick={handleSearch}
                                     disabled={!selectedDestination || !searchForm.from || loadingSearch}
                                 >
-                                    {loadingSearch ? "Searching..." : "Search flights"}
+                                    {loadingSearch
+                                        ? "Searching..."
+                                        : tripMode === "HOTEL_ONLY"
+                                            ? "Search hotels"
+                                            : "Search flights"}
                                 </HeroButton>
 
                                 <HeroButton onClick={() => navigate("/plan/ai")}>
@@ -835,7 +915,6 @@ export default function ManualPlannerPage() {
                                                 </select>
                                             </Field>
 
-
                                             <Field label="Board type">
                                                 <select
                                                     value={searchForm.boardType}
@@ -862,7 +941,6 @@ export default function ManualPlannerPage() {
                                                     </option>
                                                 </select>
                                             </Field>
-
                                         </div>
 
                                         <div className="mt-5 flex flex-col gap-3">
@@ -894,7 +972,7 @@ export default function ManualPlannerPage() {
                                 <div className="mb-5">
                                     <div className="text-xl font-bold text-white">Selected destination</div>
                                     <div className="mt-1 text-sm text-white/70">
-                                        Quick preview before moving to flight results
+                                        Quick preview before moving to {tripMode === "HOTEL_ONLY" ? "hotel" : "flight"} results
                                     </div>
                                 </div>
 
@@ -922,6 +1000,9 @@ export default function ManualPlannerPage() {
                                                 </Badge>
                                                 <Badge tone="blue">
                                                     Origin airport: {resolvedOriginIata}
+                                                </Badge>
+                                                <Badge tone="yellow">
+                                                    {tripMode === "HOTEL_ONLY" ? "Hotel only" : "Flight + Hotel"}
                                                 </Badge>
                                             </div>
 

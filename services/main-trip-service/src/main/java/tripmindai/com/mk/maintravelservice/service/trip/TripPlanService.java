@@ -28,6 +28,8 @@ public class TripPlanService {
 
         TripPlan plan = new TripPlan();
         plan.setUsername(username);
+        plan.setTripMode(req.tripMode() == null || req.tripMode().isBlank() ? "FLIGHT_HOTEL" : req.tripMode());
+
         plan.setOrigin(req.origin());
         plan.setDestinationCityCode(req.destinationCityCode());
         plan.setDestinationName(req.destinationName());
@@ -40,6 +42,11 @@ public class TripPlanService {
         plan.setHotelName(req.hotelName());
         plan.setHotelPrice(toBigDecimal(req.hotelPrice()));
         plan.setHotelCurrency(defaultCurrency(req.hotelCurrency()));
+        plan.setHotelCheckInDate(parseLocalDate(req.hotelCheckInDate()));
+        plan.setHotelCheckOutDate(parseLocalDate(req.hotelCheckOutDate()));
+        plan.setBoardType(req.boardType());
+        plan.setPaymentPolicy(req.paymentPolicy());
+        plan.setRoomQuantity(req.roomQuantity());
 
         plan.setFlightAirlineCode(req.flightAirlineCode());
         plan.setFlightAirlineName(req.flightAirlineName());
@@ -49,6 +56,8 @@ public class TripPlanService {
         plan.setFlightDestinationCity(req.flightDestinationCity());
         plan.setFlightDepartureAt(req.flightDepartureAt());
         plan.setFlightArrivalAt(req.flightArrivalAt());
+        plan.setReturnFlightDepartureAt(req.returnFlightDepartureAt());
+        plan.setReturnFlightArrivalAt(req.returnFlightArrivalAt());
         plan.setFlightStops(req.flightStops());
         plan.setFlightTripType(req.flightTripType());
         plan.setFlightPrice(toBigDecimal(req.flightPrice()));
@@ -94,6 +103,7 @@ public class TripPlanService {
         return new TripPlanDto(
                 plan.getId(),
                 plan.getUsername(),
+                plan.getTripMode(),
                 plan.getOrigin(),
                 plan.getDestinationCityCode(),
                 plan.getDestinationName(),
@@ -105,6 +115,11 @@ public class TripPlanService {
                 plan.getHotelName(),
                 toDouble(plan.getHotelPrice()),
                 plan.getHotelCurrency(),
+                plan.getHotelCheckInDate(),
+                plan.getHotelCheckOutDate(),
+                plan.getBoardType(),
+                plan.getPaymentPolicy(),
+                plan.getRoomQuantity(),
                 plan.getFlightAirlineCode(),
                 plan.getFlightAirlineName(),
                 plan.getFlightOriginIata(),
@@ -113,6 +128,8 @@ public class TripPlanService {
                 plan.getFlightDestinationCity(),
                 plan.getFlightDepartureAt(),
                 plan.getFlightArrivalAt(),
+                plan.getReturnFlightDepartureAt(),
+                plan.getReturnFlightArrivalAt(),
                 plan.getFlightStops(),
                 plan.getFlightTripType(),
                 toDouble(plan.getFlightPrice()),
@@ -121,6 +138,13 @@ public class TripPlanService {
                 plan.getTotalCurrency(),
                 plan.getCreatedAt()
         );
+    }
+
+    private LocalDate parseLocalDate(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return LocalDate.parse(value);
     }
 
     private BigDecimal toBigDecimal(Double value) {

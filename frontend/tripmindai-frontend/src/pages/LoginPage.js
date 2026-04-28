@@ -42,8 +42,15 @@ export default function LoginPage() {
         e.preventDefault();
         setErr("");
 
-        if (!form.email.trim()) return setErr("Внеси email.");
-        if (!form.password) return setErr("Внеси password.");
+        if (!form.email.trim()) {
+            setErr("Enter your email.");
+            return;
+        }
+
+        if (!form.password) {
+            setErr("Enter your password.");
+            return;
+        }
 
         setLoading(true);
         try {
@@ -61,7 +68,7 @@ export default function LoginPage() {
             }
 
             if (!res?.token) {
-                throw new Error("Token не е вратен од сервер.");
+                throw new Error("Token was not returned by the server.");
             }
 
             loginWithToken(res.token, res);
@@ -69,7 +76,7 @@ export default function LoginPage() {
             const from = location.state?.from;
             nav(from || "/discover", { replace: true });
         } catch (e2) {
-            setErr(e2?.message || "Login не успеа.");
+            setErr(e2?.message || "Login failed.");
         } finally {
             setLoading(false);
         }
@@ -99,8 +106,9 @@ export default function LoginPage() {
 
                                     <div className="mt-8 flex flex-wrap gap-3">
                                         <Pill tone="green">AI trips</Pill>
+                                        <Pill>Hotels + Flights</Pill>
                                         <Pill>Hotels</Pill>
-                                        <Pill>Saved plans</Pill>
+                                        <Pill>Activities</Pill>
                                     </div>
                                 </div>
                             </div>
@@ -110,8 +118,12 @@ export default function LoginPage() {
                                     <GlassPanel className="p-6 text-white lg:p-8">
                                         <div className="mb-8 flex items-start justify-between gap-4">
                                             <div className="flex items-center gap-3">
-                                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/90 text-lg font-bold text-slate-900 shadow-lg">
-                                                    TM
+                                                <div className="flex h-13 w-13 items-center justify-center overflow-hidden">
+                                                    <img
+                                                        src="/web-app-manifest-512x512.png"
+                                                        alt="TripMindAI logo"
+                                                        className="h-14 w-14 object-contain"
+                                                    />
                                                 </div>
                                                 <div>
                                                     <div className="text-2xl font-bold text-white">Sign in</div>
@@ -133,7 +145,7 @@ export default function LoginPage() {
                                         <form onSubmit={onSubmit} className="space-y-5">
                                             {err ? (
                                                 <div className="rounded-2xl border border-rose-300/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
-                                                    ⚠️ {err}
+                                                    {err}
                                                 </div>
                                             ) : null}
 

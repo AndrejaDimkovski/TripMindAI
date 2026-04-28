@@ -1,6 +1,8 @@
 package tripmindai.com.mk.maintravelservice.dto.trip;
 
 public record SaveTripPlanRequest(
+        String tripMode,
+
         String origin,
         String destinationCityCode,
         String destinationName,
@@ -13,6 +15,11 @@ public record SaveTripPlanRequest(
         String hotelName,
         Double hotelPrice,
         String hotelCurrency,
+        String hotelCheckInDate,
+        String hotelCheckOutDate,
+        String boardType,
+        String paymentPolicy,
+        Integer roomQuantity,
 
         String flightAirlineCode,
         String flightAirlineName,
@@ -22,6 +29,8 @@ public record SaveTripPlanRequest(
         String flightDestinationCity,
         String flightDepartureAt,
         String flightArrivalAt,
+        String returnFlightDepartureAt,
+        String returnFlightArrivalAt,
         Integer flightStops,
         String flightTripType,
         Double flightPrice,

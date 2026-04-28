@@ -1,4 +1,4 @@
-package tripmindai.com.mk.maintravelservice.web;
+package tripmindai.com.mk.maintravelservice.web.trip;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

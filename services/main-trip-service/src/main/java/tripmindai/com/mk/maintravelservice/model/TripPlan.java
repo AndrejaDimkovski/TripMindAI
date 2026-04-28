@@ -17,7 +17,10 @@ public class TripPlan {
     @Column(nullable = false)
     private String username;
 
-    @Column(nullable = false, length = 100)
+    @Column(nullable = false, length = 30)
+    private String tripMode = "FLIGHT_HOTEL";
+
+    @Column(length = 100)
     private String origin;
 
     @Column(nullable = false, length = 10)
@@ -50,29 +53,50 @@ public class TripPlan {
     @Column(nullable = false, length = 10)
     private String hotelCurrency;
 
-    @Column(nullable = false)
+    @Column
+    private LocalDate hotelCheckInDate;
+
+    @Column
+    private LocalDate hotelCheckOutDate;
+
+    @Column
+    private String boardType;
+
+    @Column
+    private String paymentPolicy;
+
+    @Column
+    private Integer roomQuantity;
+
+    @Column
     private String flightAirlineCode;
 
     @Column
     private String flightAirlineName;
 
-    @Column(nullable = false, length = 10)
+    @Column(length = 10)
     private String flightOriginIata;
 
     @Column
     private String flightOriginCity;
 
-    @Column(nullable = false, length = 10)
+    @Column(length = 10)
     private String flightDestIata;
 
     @Column
     private String flightDestinationCity;
 
-    @Column(nullable = false)
+    @Column
     private String flightDepartureAt;
 
-    @Column(nullable = false)
+    @Column
     private String flightArrivalAt;
+
+    @Column
+    private String returnFlightDepartureAt;
+
+    @Column
+    private String returnFlightArrivalAt;
 
     @Column
     private Integer flightStops;
@@ -80,10 +104,10 @@ public class TripPlan {
     @Column
     private String flightTripType;
 
-    @Column(nullable = false, precision = 12, scale = 2)
+    @Column(precision = 12, scale = 2)
     private BigDecimal flightPrice;
 
-    @Column(nullable = false, length = 10)
+    @Column(length = 10)
     private String flightCurrency;
 
     @Column(nullable = false, precision = 12, scale = 2)
@@ -107,6 +131,14 @@ public class TripPlan {
 
     public void setUsername(String username) {
         this.username = username;
+    }
+
+    public String getTripMode() {
+        return tripMode;
+    }
+
+    public void setTripMode(String tripMode) {
+        this.tripMode = tripMode;
     }
 
     public String getOrigin() {
@@ -197,6 +229,46 @@ public class TripPlan {
         this.hotelCurrency = hotelCurrency;
     }
 
+    public LocalDate getHotelCheckInDate() {
+        return hotelCheckInDate;
+    }
+
+    public void setHotelCheckInDate(LocalDate hotelCheckInDate) {
+        this.hotelCheckInDate = hotelCheckInDate;
+    }
+
+    public LocalDate getHotelCheckOutDate() {
+        return hotelCheckOutDate;
+    }
+
+    public void setHotelCheckOutDate(LocalDate hotelCheckOutDate) {
+        this.hotelCheckOutDate = hotelCheckOutDate;
+    }
+
+    public String getBoardType() {
+        return boardType;
+    }
+
+    public void setBoardType(String boardType) {
+        this.boardType = boardType;
+    }
+
+    public String getPaymentPolicy() {
+        return paymentPolicy;
+    }
+
+    public void setPaymentPolicy(String paymentPolicy) {
+        this.paymentPolicy = paymentPolicy;
+    }
+
+    public Integer getRoomQuantity() {
+        return roomQuantity;
+    }
+
+    public void setRoomQuantity(Integer roomQuantity) {
+        this.roomQuantity = roomQuantity;
+    }
+
     public String getFlightAirlineCode() {
         return flightAirlineCode;
     }
@@ -259,6 +331,22 @@ public class TripPlan {
 
     public void setFlightArrivalAt(String flightArrivalAt) {
         this.flightArrivalAt = flightArrivalAt;
+    }
+
+    public String getReturnFlightDepartureAt() {
+        return returnFlightDepartureAt;
+    }
+
+    public void setReturnFlightDepartureAt(String returnFlightDepartureAt) {
+        this.returnFlightDepartureAt = returnFlightDepartureAt;
+    }
+
+    public String getReturnFlightArrivalAt() {
+        return returnFlightArrivalAt;
+    }
+
+    public void setReturnFlightArrivalAt(String returnFlightArrivalAt) {
+        this.returnFlightArrivalAt = returnFlightArrivalAt;
     }
 
     public Integer getFlightStops() {

@@ -2,6 +2,7 @@ package tripmindai.com.mk.maintravelservice.service.AI;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Service;
 import tripmindai.com.mk.maintravelservice.dto.AI.AiTripInterpretation;
 import tripmindai.com.mk.maintravelservice.dto.AI.AiTripRequest;
@@ -19,7 +20,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 @Service
 public class AiInterpretationService {
@@ -258,73 +258,87 @@ public class AiInterpretationService {
             List<Country> countries,
             List<Destination> destinations
     ) {
+        Integer aiPeople = readInt(aiExtract, "people");
+        Integer aiDurationDays = readInt(aiExtract, "durationDays");
+        String aiFromDate = readText(aiExtract, "fromDate");
+        String aiToDate = readText(aiExtract, "toDate");
+        String aiMonth = readText(aiExtract, "month");
+        String aiFlex = readText(aiExtract, "dateFlexibilityHint");
+        String aiDestinationText = readText(aiExtract, "destinationText");
+        String aiCountryText = readText(aiExtract, "countryText");
+        String aiTravelStyle = readText(aiExtract, "travelStyle");
+        String aiBudgetLevel = readText(aiExtract, "budgetLevel");
+
+        Integer explicitPeople = extractPeople(promptLower);
+        Integer explicitDuration = extractDurationDays(promptLower);
+
         Integer people = firstNonNullInt(
-                readInt(aiExtract, "people"),
+                explicitPeople,
                 base.people(),
-                extractPeople(promptLower),
+                aiPeople,
                 1
         );
 
         Integer durationDays = firstNonNullInt(
-                readInt(aiExtract, "durationDays"),
+                explicitDuration,
                 base.durationDays(),
-                extractDurationDays(promptLower)
+                aiDurationDays
         );
 
         String fromDate = firstNonBlank(
-                readText(aiExtract, "fromDate"),
                 base.fromDate(),
-                extractIsoDate(prompt, "from")
+                extractIsoDate(prompt, "from"),
+                aiFromDate
         );
 
         String toDate = firstNonBlank(
-                readText(aiExtract, "toDate"),
                 base.toDate(),
-                extractIsoDate(prompt, "to")
+                extractIsoDate(prompt, "to"),
+                aiToDate
         );
 
         String month = firstNonBlank(
-                readText(aiExtract, "month"),
                 base.month(),
                 extractMonth(promptLower),
-                extractSeasonAsMonth(promptLower)
+                extractSeasonAsMonth(promptLower),
+                aiMonth
         );
 
         String dateFlexibilityHint = firstNonBlank(
-                readText(aiExtract, "dateFlexibilityHint"),
                 base.dateFlexibilityHint(),
-                extractDateFlexibilityHint(promptLower)
+                extractDateFlexibilityHint(promptLower),
+                aiFlex
         );
 
         List<String> mentionedDestinations = extractMentionedDestinations(prompt, destinations);
 
         String destinationText = firstNonBlank(
-                readText(aiExtract, "destinationText"),
                 base.destinationText(),
                 !mentionedDestinations.isEmpty() ? mentionedDestinations.get(0) : null,
                 normalizeKnownLocationAlias(prompt),
-                extractDestinationText(prompt, destinations)
+                extractDestinationText(prompt, destinations),
+                aiDestinationText
         );
 
         String countryText = firstNonBlank(
-                readText(aiExtract, "countryText"),
                 base.countryText(),
                 extractCountryName(prompt, countries),
-                normalizeKnownCountryAlias(prompt)
+                normalizeKnownCountryAlias(prompt),
+                aiCountryText
         );
 
         String travelStyle = firstNonBlank(
-                readText(aiExtract, "travelStyle"),
                 base.travelStyle(),
                 detectTravelStyle(promptLower),
                 detectWarmWeatherStyle(promptLower),
+                aiTravelStyle,
                 "general"
         );
 
         String budgetLevel = normalizeBudget(firstNonBlank(
-                readText(aiExtract, "budgetLevel"),
                 base.budgetLevel(),
                 extractBudgetLevel(promptLower),
+                aiBudgetLevel,
                 "medium"
         ));
 
@@ -527,6 +541,8 @@ public class AiInterpretationService {
                 - If only duration is known, fill durationDays.
                 - If only season is known, map it to a month.
                 - If only a month is known, put it in "month".
+                - Do NOT interpret "for 6 days" or "7 nights" as number of people.
+                - Only fill "people" when the text explicitly refers to travelers, guests, adults, persons, couple, family, group, or solo travel.
                 - Keep values concise and normalized.
                 """;
 
@@ -549,10 +565,52 @@ public class AiInterpretationService {
         try {
             String json = client.chatJson(system, user);
             if (json == null || json.isBlank()) return null;
-            return mapper.readTree(json);
+
+            JsonNode node = mapper.readTree(json);
+            return sanitizeAiExtract(node);
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private JsonNode sanitizeAiExtract(JsonNode node) {
+        if (node == null || !node.isObject()) return node;
+
+        ObjectNode obj = (ObjectNode) node;
+
+        if (obj.hasNonNull("budgetLevel")) {
+            obj.put("budgetLevel", normalizeBudget(obj.get("budgetLevel").asText()));
+        }
+
+        if (obj.hasNonNull("dateFlexibilityHint")) {
+            String flex = safe(obj.get("dateFlexibilityHint").asText()).trim().toUpperCase(Locale.ROOT);
+            if (!TravelPromptMappings.FLEX_VALUES.contains(flex)) obj.putNull("dateFlexibilityHint");
+            else obj.put("dateFlexibilityHint", flex);
+        }
+
+        if (obj.hasNonNull("fromDate")) {
+            String normalized = normalizeInputDate(obj.get("fromDate").asText());
+            if (normalized == null) obj.putNull("fromDate");
+            else obj.put("fromDate", normalized);
+        }
+
+        if (obj.hasNonNull("toDate")) {
+            String normalized = normalizeInputDate(obj.get("toDate").asText());
+            if (normalized == null) obj.putNull("toDate");
+            else obj.put("toDate", normalized);
+        }
+
+        if (obj.hasNonNull("people")) {
+            int people = obj.get("people").asInt(0);
+            if (people <= 0 || people > 20) obj.putNull("people");
+        }
+
+        if (obj.hasNonNull("durationDays")) {
+            int duration = obj.get("durationDays").asInt(0);
+            if (duration <= 0 || duration > 60) obj.putNull("durationDays");
+        }
+
+        return obj;
     }
 
     private AiTripInterpretation fallbackInterpretation(
@@ -651,24 +709,50 @@ public class AiInterpretationService {
             }
         }
 
-        Matcher m = Pattern.compile("\\b(\\d+)\\s*(лица|persons|people|adults|adult|guests|guest|ppl)\\b").matcher(t);
-        if (m.find()) {
+        Matcher explicitPeople = Pattern.compile(
+                "\\b(\\d+)\\s*(лица|lice|lugje|persons|person|people|adults|adult|guests|guest|travellers|traveler|travelers|ppl)\\b"
+        ).matcher(t);
+        if (explicitPeople.find()) {
             try {
-                return Integer.parseInt(m.group(1));
+                return Integer.parseInt(explicitPeople.group(1));
             } catch (Exception ignored) {}
         }
 
-        Matcher m2 = Pattern.compile("\\bfor\\s+(\\d+)\\b").matcher(t);
-        if (m2.find()) {
+        Matcher familyOf = Pattern.compile(
+                "\\b(family|group|party)\\s+of\\s+(\\d+)\\b"
+        ).matcher(t);
+        if (familyOf.find()) {
             try {
-                return Integer.parseInt(m2.group(1));
+                return Integer.parseInt(familyOf.group(2));
             } catch (Exception ignored) {}
         }
 
-        if (t.contains("for two persons") || t.contains("for two people")) return 2;
-        if (t.contains("for one person") || t.contains("just me")) return 1;
-        if (t.contains("for three persons") || t.contains("for three people")) return 3;
-        if (t.contains("for four persons") || t.contains("for four people")) return 4;
+        Matcher weAre = Pattern.compile(
+                "\\bwe are\\s+(\\d+)\\b"
+        ).matcher(t);
+        if (weAre.find()) {
+            try {
+                return Integer.parseInt(weAre.group(1));
+            } catch (Exception ignored) {}
+        }
+
+        Matcher us = Pattern.compile(
+                "\\b(\\d+)\\s+of us\\b"
+        ).matcher(t);
+        if (us.find()) {
+            try {
+                return Integer.parseInt(us.group(1));
+            } catch (Exception ignored) {}
+        }
+
+        if (t.contains("just me") || t.contains("solo") || t.contains("alone") || t.contains("myself")) return 1;
+        if (t.contains("couple")) return 2;
+        if (t.contains("me and my wife")) return 2;
+        if (t.contains("me and my husband")) return 2;
+        if (t.contains("me and my girlfriend")) return 2;
+        if (t.contains("me and my boyfriend")) return 2;
+        if (t.contains("me and my friend")) return 2;
+        if (t.contains("me and friend")) return 2;
 
         return null;
     }
@@ -676,40 +760,63 @@ public class AiInterpretationService {
     private Integer extractDurationDays(String text) {
         String t = normalizeText(text);
 
-        Matcher m1 = Pattern.compile("\\b(\\d+)\\s*(days|day|nights|night)\\b").matcher(t);
+        Matcher m1 = Pattern.compile("\\b(\\d+)\\s*[- ]?(days|day|nights|night)\\b").matcher(t);
         if (m1.find()) {
             try {
                 return Integer.parseInt(m1.group(1));
             } catch (Exception ignored) {}
         }
 
-        Matcher m2 = Pattern.compile("\\b(\\d+)\\s*(дена|денови|ден|ноќи|ноки|ноќ)\\b").matcher(t);
+        Matcher m2 = Pattern.compile("\\b(\\d+)\\s*[- ]?(дена|денови|ден|ноќи|ноки|ноќ)\\b").matcher(t);
         if (m2.find()) {
             try {
                 return Integer.parseInt(m2.group(1));
             } catch (Exception ignored) {}
         }
 
-        Matcher m3 = Pattern.compile("\\bfor\\s+(\\d+)\\s*(days|day|nights|night)\\b").matcher(t);
+        Matcher m3 = Pattern.compile("\\bfor\\s+(\\d+)\\s*[- ]?(days|day|nights|night)\\b").matcher(t);
         if (m3.find()) {
             try {
                 return Integer.parseInt(m3.group(1));
             } catch (Exception ignored) {}
         }
 
-        Matcher m4 = Pattern.compile("\\baround\\s+(\\d+)\\s*(days|day|nights|night)\\b").matcher(t);
+        Matcher m4 = Pattern.compile("\\baround\\s+(\\d+)\\s*[- ]?(days|day|nights|night)\\b").matcher(t);
         if (m4.find()) {
             try {
                 return Integer.parseInt(m4.group(1));
             } catch (Exception ignored) {}
         }
 
-        Matcher m5 = Pattern.compile("\\bstay\\s+(\\d+)\\s*(days|day|nights|night)\\b").matcher(t);
+        Matcher m5 = Pattern.compile("\\bstay\\s+(\\d+)\\s*[- ]?(days|day|nights|night)\\b").matcher(t);
         if (m5.find()) {
             try {
                 return Integer.parseInt(m5.group(1));
             } catch (Exception ignored) {}
         }
+
+        Matcher m6 = Pattern.compile("\\b(\\d+)\\s*[- ]?day\\s+stay\\b").matcher(t);
+        if (m6.find()) {
+            try {
+                return Integer.parseInt(m6.group(1));
+            } catch (Exception ignored) {}
+        }
+
+        Matcher m7 = Pattern.compile("\\b(\\d+)\\s*[- ]?night\\s+trip\\b").matcher(t);
+        if (m7.find()) {
+            try {
+                return Integer.parseInt(m7.group(1));
+            } catch (Exception ignored) {}
+        }
+
+        for (Map.Entry<String, Integer> entry : TravelPromptMappings.DURATION_KEYWORDS.entrySet()) {
+            if (t.contains(normalizeText(entry.getKey()))) {
+                return entry.getValue();
+            }
+        }
+
+        if (t.contains("weekend") || t.contains("vikend") || t.contains("викенд")) return 2;
+        if (t.contains("long weekend")) return 3;
 
         return null;
     }

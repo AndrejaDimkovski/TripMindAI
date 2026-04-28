@@ -1,10 +1,10 @@
-package tripmindai.com.mk.maintravelservice.web;
+package tripmindai.com.mk.maintravelservice.web.ai;
 
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import tripmindai.com.mk.maintravelservice.dto.RecommendedDestinationDto;
+import tripmindai.com.mk.maintravelservice.dto.AI.RecommendedDestinationDto;
 import tripmindai.com.mk.maintravelservice.dto.AI.AiRecommendationResponse;
 import tripmindai.com.mk.maintravelservice.dto.AI.AiTripInterpretation;
 import tripmindai.com.mk.maintravelservice.dto.AI.AiTripRequest;

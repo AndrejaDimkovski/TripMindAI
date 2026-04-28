@@ -1,9 +1,9 @@
 package tripmindai.com.mk.hotelsservice.service;
 
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import tripmindai.com.mk.hotelsservice.config.BookingRapidApiClient;
 import tripmindai.com.mk.hotelsservice.dto.*;
-
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
@@ -23,6 +23,11 @@ public class HotelsSearchService {
         this.bookingClient = bookingClient;
     }
 
+    @Cacheable(
+            cacheNames = "hotel-destinations",
+            key = "#root.target.destinationCacheKey(#query)",
+            unless = "#result == null"
+    )
     public List<DestinationSearchDto> searchDestinations(String query) {
         Map<?, ?> raw = bookingClient.searchDestinationRaw(query);
         return mapDestinations(raw);
@@ -39,6 +44,11 @@ public class HotelsSearchService {
         return searchHotels(destId, destType, checkIn, checkOut, adults, pageNo, null);
     }
 
+    @Cacheable(
+            cacheNames = "hotel-search",
+            key = "#root.target.hotelSearchCacheKey(#destId, #destType, #checkIn, #checkOut, #adults, #pageNo, #priceRange)",
+            unless = "#result == null"
+    )
     public HotelSearchResponseDto searchHotels(
             String destId,
             String destType,
@@ -86,6 +96,11 @@ public class HotelsSearchService {
         );
     }
 
+    @Cacheable(
+            cacheNames = "hotel-details",
+            key = "#root.target.hotelDetailsCacheKey(#hotelId, #checkIn, #checkOut, #adults, #cityNameFromReq)",
+            unless = "#result == null"
+    )
     public HotelDetailsDto hotelDetails(
             String hotelId,
             String checkIn,
@@ -246,6 +261,11 @@ public class HotelsSearchService {
         );
     }
 
+    @Cacheable(
+            cacheNames = "hotel-full-details",
+            key = "#root.target.hotelDetailsCacheKey(#hotelId, #checkIn, #checkOut, #adults, #cityNameFromReq)",
+            unless = "#result == null"
+    )
     public HotelFullDetailsDto hotelFullDetails(
             String hotelId,
             String checkIn,
@@ -300,6 +320,64 @@ public class HotelsSearchService {
                 photos,
                 facilities
         );
+    }
+
+    public String destinationCacheKey(String query) {
+        return normalizeCachePart(query);
+    }
+
+    public String hotelSearchCacheKey(
+            String destId,
+            String destType,
+            String checkIn,
+            String checkOut,
+            int adults,
+            int pageNo,
+            String priceRange
+    ) {
+        LocalDate in = parseDateOrTomorrow(checkIn);
+        LocalDate out = parseDateOrTomorrow(checkOut);
+
+        if (!out.isAfter(in)) {
+            out = in.plusDays(1);
+        }
+
+        return String.join("|",
+                normalizeCachePart(destId),
+                normalizeCachePart(destType),
+                in.toString(),
+                out.toString(),
+                String.valueOf(Math.max(1, adults)),
+                String.valueOf(Math.max(1, pageNo)),
+                normalizeCachePart(priceRange)
+        );
+    }
+
+    public String hotelDetailsCacheKey(
+            String hotelId,
+            String checkIn,
+            String checkOut,
+            int adults,
+            String cityNameFromReq
+    ) {
+        LocalDate in = parseDateOrTomorrow(checkIn);
+        LocalDate out = parseDateOrTomorrow(checkOut);
+
+        if (!out.isAfter(in)) {
+            out = in.plusDays(1);
+        }
+
+        return String.join("|",
+                normalizeCachePart(hotelId),
+                in.toString(),
+                out.toString(),
+                String.valueOf(Math.max(1, adults)),
+                normalizeCachePart(cityNameFromReq)
+        );
+    }
+
+    public String normalizeCachePart(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
     private List<DestinationSearchDto> mapDestinations(Map<?, ?> raw) {
@@ -995,6 +1073,8 @@ public class HotelsSearchService {
             return fallbackRooms != null ? fallbackRooms : List.of();
         }
 
+        Map<String, Map<?, ?>> blockByRoomId = mapBlocksByRoomId(data.get("block"));
+
         Object roomsObj = data.get("rooms");
         if (!(roomsObj instanceof Map<?, ?> roomsMap) || roomsMap.isEmpty()) {
             return fallbackRooms != null ? fallbackRooms : List.of();
@@ -1006,6 +1086,8 @@ public class HotelsSearchService {
             String roomId = entry.getKey() == null ? null : String.valueOf(entry.getKey());
 
             if (!(entry.getValue() instanceof Map<?, ?> roomMap)) continue;
+
+            Map<?, ?> blockMap = roomId != null ? blockByRoomId.get(roomId) : null;
 
             String roomName = firstNonBlank(
                     str(roomMap.get("name")),
@@ -1057,6 +1139,11 @@ public class HotelsSearchService {
             addStringList(roomAmenities, roomMap.get("facilities"));
             addStringList(roomAmenities, roomMap.get("highlights"));
 
+            String boardType = extractBoardType(blockMap, roomMap);
+            String paymentPolicy = extractPaymentPolicy(blockMap);
+            Boolean refundable = extractRefundable(blockMap);
+            String cancellationPolicy = extractCancellationPolicy(blockMap);
+
             result.add(new RoomInfoDto(
                     roomId,
                     roomName,
@@ -1069,9 +1156,10 @@ public class HotelsSearchService {
                     roomSizeUnit,
                     roomPhotos.stream().limit(MAX_ROOM_PHOTOS).toList(),
                     roomAmenities.stream().limit(25).toList(),
-                    null,
-                    null,
-                    null
+                    boardType,
+                    paymentPolicy,
+                    refundable,
+                    cancellationPolicy
             ));
         }
 
@@ -1375,6 +1463,11 @@ public class HotelsSearchService {
                 }
             }
 
+            String boardType = extractBoardType(blockMap, roomMap);
+            String paymentPolicy = extractPaymentPolicy(blockMap);
+            Boolean refundable = extractRefundable(blockMap);
+            String cancellationPolicy = extractCancellationPolicy(blockMap);
+
             result.add(new RoomInfoDto(
                     roomId,
                     roomName,
@@ -1387,9 +1480,10 @@ public class HotelsSearchService {
                     roomSizeUnit,
                     roomPhotos.stream().limit(MAX_ROOM_PHOTOS).toList(),
                     roomAmenities.stream().limit(25).toList(),
-                    null,
-                    null,
-                    null
+                    boardType,
+                    paymentPolicy,
+                    refundable,
+                    cancellationPolicy
             ));
         }
 
@@ -1607,6 +1701,120 @@ public class HotelsSearchService {
                 );
                 if (!isBlank(nested)) {
                     return nested;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private String extractBoardType(Map<?, ?> blockMap, Map<?, ?> roomMap) {
+        String mealplan = firstNonBlank(
+                str(blockMap != null ? blockMap.get("mealplan") : null),
+                str(blockMap != null ? blockMap.get("meal_plan") : null),
+                str(roomMap != null ? roomMap.get("mealplan") : null)
+        );
+
+        if (!isBlank(mealplan)) {
+            return mealplan.trim();
+        }
+
+        if (bool(blockMap != null ? blockMap.get("all_inclusive") : null) == Boolean.TRUE) return "ALL_INCLUSIVE";
+        if (bool(blockMap != null ? blockMap.get("full_board") : null) == Boolean.TRUE) return "FULL_BOARD";
+        if (bool(blockMap != null ? blockMap.get("half_board") : null) == Boolean.TRUE) return "HALF_BOARD";
+        if (bool(blockMap != null ? blockMap.get("breakfast_included") : null) == Boolean.TRUE) return "BREAKFAST_INCLUDED";
+
+        return null;
+    }
+
+    private String extractPaymentPolicy(Map<?, ?> blockMap) {
+        if (blockMap == null) return null;
+
+        if (bool(blockMap.get("pay_in_advance")) == Boolean.TRUE) {
+            return "PREPAYMENT_REQUIRED";
+        }
+
+        if (bool(blockMap.get("deposit_required")) == Boolean.TRUE) {
+            return "DEPOSIT_REQUIRED";
+        }
+
+        Map<?, ?> paymentterms = mapOf(blockMap.get("paymentterms"));
+        if (paymentterms != null) {
+            Map<?, ?> prepayment = mapOf(paymentterms.get("prepayment"));
+            if (prepayment != null) {
+                String desc = firstNonBlank(
+                        str(prepayment.get("type_translation")),
+                        str(prepayment.get("extended_type_translation")),
+                        str(prepayment.get("simple_translation")),
+                        str(prepayment.get("description"))
+                );
+
+                if (!isBlank(desc)) {
+                    String lower = desc.toLowerCase(Locale.ROOT);
+                    if (lower.contains("no prepayment")) return "PAY_AT_PROPERTY";
+                    if (lower.contains("pay during your stay")) return "PAY_AT_PROPERTY";
+                    if (lower.contains("prepayment")) return "PREPAYMENT_REQUIRED";
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private Boolean extractRefundable(Map<?, ?> blockMap) {
+        if (blockMap == null) return null;
+
+        if (blockMap.containsKey("refundable")) {
+            return bool(blockMap.get("refundable"));
+        }
+
+        Map<?, ?> paymentterms = mapOf(blockMap.get("paymentterms"));
+        if (paymentterms != null) {
+            Map<?, ?> cancellation = mapOf(paymentterms.get("cancellation"));
+            if (cancellation != null) {
+                String type = firstNonBlank(
+                        str(cancellation.get("type_translation")),
+                        str(cancellation.get("description"))
+                );
+
+                if (!isBlank(type)) {
+                    String lower = type.toLowerCase(Locale.ROOT);
+                    if (lower.contains("free")) return true;
+                    if (lower.contains("non-refundable") || lower.contains("non refundable")) return false;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private String extractCancellationPolicy(Map<?, ?> blockMap) {
+        if (blockMap == null) return null;
+
+        Map<?, ?> paymentterms = mapOf(blockMap.get("paymentterms"));
+        if (paymentterms != null) {
+            Map<?, ?> cancellation = mapOf(paymentterms.get("cancellation"));
+            if (cancellation != null) {
+                return firstMeaningfulText(
+                        cancellation.get("description"),
+                        cancellation.get("type_translation")
+                );
+            }
+        }
+
+        Map<?, ?> blockText = mapOf(blockMap.get("block_text"));
+        if (blockText != null) {
+            Object policiesObj = blockText.get("policies");
+            if (policiesObj instanceof List<?> policiesList) {
+                for (Object item : policiesList) {
+                    if (!(item instanceof Map<?, ?> p)) continue;
+
+                    String clazz = str(p.get("class"));
+                    String content = str(p.get("content"));
+
+                    if ("POLICY_CANCELLATION".equalsIgnoreCase(clazz) && !isBlank(content)) {
+                        return content.trim();
+                    }
                 }
             }
         }

@@ -1,4 +1,4 @@
-package tripmindai.com.mk.maintravelservice.dto;
+package tripmindai.com.mk.maintravelservice.dto.AI;
 
 public record RecommendedDestinationDto(
         Long id,

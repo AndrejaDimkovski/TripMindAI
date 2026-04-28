@@ -1,8 +1,9 @@
-package tripmindai.com.mk.maintravelservice.web;
+package tripmindai.com.mk.maintravelservice.web.auth;
 
 import com.warrenstrange.googleauth.GoogleAuthenticator;
 import org.apache.commons.codec.binary.Base32;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,7 +16,7 @@ import tripmindai.com.mk.maintravelservice.model.Role;
 import tripmindai.com.mk.maintravelservice.model.User;
 import tripmindai.com.mk.maintravelservice.repository.UserRepository;
 import tripmindai.com.mk.maintravelservice.security.JwtService;
-import tripmindai.com.mk.maintravelservice.service.EmailService;
+import tripmindai.com.mk.maintravelservice.service.email.EmailService;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
@@ -46,23 +47,12 @@ public class AuthController {
         this.emailService = emailService;
     }
 
-    public record RegisterReq(String firstName, String lastName, String email, String password) {
-    }
-
-    public record VerifyEmailReq(String email, String code) {
-    }
-
-    public record LoginReq(String email, String password) {
-    }
-
-    public record Login2FaReq(String email, String code) {
-    }
-
-    public record CodeReq(String code) {
-    }
-
-    public record Msg(String message) {
-    }
+    public record RegisterReq(String firstName, String lastName, String email, String password) {}
+    public record VerifyEmailReq(String email, String code) {}
+    public record LoginReq(String email, String password) {}
+    public record Login2FaReq(String email, String code) {}
+    public record CodeReq(String code) {}
+    public record Msg(String message) {}
 
     @PostMapping("/register")
     public Object register(@RequestBody RegisterReq req) {
@@ -104,20 +94,27 @@ public class AuthController {
         String email = normalizeEmail(req.email());
         String code = trim(req.code());
 
+        if (!isEmailValid(email)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a valid email.");
+        }
+        if (code.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Verification code is required.");
+        }
+
         User user = users.findByEmailIgnoreCase(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "user not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "User not found."));
 
         if (user.isEmailVerified()) {
-            return new Msg("email already verified");
+            return new Msg("Email is already verified.");
         }
         if (user.getEmailVerificationCode() == null || user.getEmailVerificationExpiry() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "verification code missing");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Verification code is missing.");
         }
         if (user.getEmailVerificationExpiry().isBefore(LocalDateTime.now())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "verification code expired");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Verification code has expired.");
         }
         if (!user.getEmailVerificationCode().equals(code)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid verification code");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid verification code.");
         }
 
         user.setEmailVerified(true);
@@ -125,61 +122,87 @@ public class AuthController {
         user.setEmailVerificationExpiry(null);
         users.save(user);
 
-        return new Msg("email verified successfully");
+        return new Msg("Email verified successfully.");
     }
 
     @PostMapping("/login")
-    public Object login(@RequestBody LoginReq req) {
+    public ResponseEntity<?> login(@RequestBody LoginReq req) {
         String email = normalizeEmail(req.email());
         String password = req.password() == null ? "" : req.password();
 
-        if (email.isBlank() || password.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "email/password required");
+        if (!isEmailValid(email)) {
+            return ResponseEntity.badRequest().body(new Msg("Enter a valid email."));
+        }
+        if (password.isBlank()) {
+            return ResponseEntity.badRequest().body(new Msg("Password is required."));
         }
 
-        User user = users.findByEmailIgnoreCase(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "invalid credentials"));
+        User user = users.findByEmailIgnoreCase(email).orElse(null);
+
+        if (user == null || !encoder.matches(password, user.getPasswordHash())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new Msg("Invalid email or password."));
+        }
 
         if (!user.isEmailVerified()) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "email not verified");
-        }
-        if (!encoder.matches(password, user.getPasswordHash())) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "invalid credentials");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new Msg("Email address is not verified."));
         }
 
         if (user.isTwoFactorEnabled()) {
-            return new Object() {
+            return ResponseEntity.ok(new Object() {
                 public final String message = "2fa required";
                 public final boolean requires2fa = true;
                 public final String emailAddress = user.getEmail();
-            };
+            });
         }
 
-        return buildLoginSuccess(user, jwtService.generateToken(user));
+        return ResponseEntity.ok(buildLoginSuccess(user, jwtService.generateToken(user)));
     }
 
     @PostMapping("/login/2fa")
-    public Object login2fa(@RequestBody Login2FaReq req) {
+    public ResponseEntity<?> login2fa(@RequestBody Login2FaReq req) {
         String email = normalizeEmail(req.email());
         String code = trim(req.code());
 
-        User user = users.findByEmailIgnoreCase(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "user not found"));
+        if (!isEmailValid(email)) {
+            return ResponseEntity.badRequest().body(new Msg("Enter a valid email."));
+        }
+        if (code.isBlank()) {
+            return ResponseEntity.badRequest().body(new Msg("2FA code is required."));
+        }
+
+        User user = users.findByEmailIgnoreCase(email).orElse(null);
+
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new Msg("Invalid email or code."));
+        }
+
+        if (!user.isEmailVerified()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new Msg("Email address is not verified."));
+        }
 
         if (!user.isTwoFactorEnabled() || user.getTotpSecret() == null || user.getTotpSecret().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "2fa is not enabled");
+            return ResponseEntity.badRequest().body(new Msg("2FA is not enabled."));
         }
 
-        if (!authorizeTotp(user.getTotpSecret(), code, HttpStatus.UNAUTHORIZED)) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "invalid 2fa code");
+        if (!authorizeTotpSafe(user.getTotpSecret(), code)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new Msg("Invalid 2FA code."));
         }
 
-        return buildLoginSuccess(user, jwtService.generateToken(user));
+        return ResponseEntity.ok(buildLoginSuccess(user, jwtService.generateToken(user)));
     }
 
     @PostMapping("/2fa/setup")
     public Object setup2fa(Authentication auth) {
-        User user = getAuthenticatedUser(auth, HttpStatus.UNAUTHORIZED, "not authenticated", HttpStatus.NOT_FOUND, "user not found");
+        User user = getAuthenticatedUser(auth, HttpStatus.UNAUTHORIZED, "Not authenticated.", HttpStatus.NOT_FOUND, "User not found.");
+
+        if (!user.isEmailVerified()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Verify your email first.");
+        }
 
         if (user.getTotpSecret() == null || user.getTotpSecret().isBlank()) {
             byte[] buffer = new byte[10];
@@ -204,32 +227,35 @@ public class AuthController {
 
     @PostMapping("/2fa/confirm")
     public Object confirm2fa(@RequestBody CodeReq req, Authentication auth) {
-        User user = getAuthenticatedUser(auth, HttpStatus.UNAUTHORIZED, "not authenticated", HttpStatus.NOT_FOUND, "user not found");
+        User user = getAuthenticatedUser(auth, HttpStatus.UNAUTHORIZED, "Not authenticated.", HttpStatus.NOT_FOUND, "User not found.");
         String code = trim(req.code());
 
+        if (code.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "2FA code is required.");
+        }
         if (user.getTotpSecret() == null || user.getTotpSecret().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "2fa setup not started");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "2FA setup has not started.");
         }
 
         if (!authorizeTotp(user.getTotpSecret(), code, HttpStatus.BAD_REQUEST)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid 2fa code");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid 2FA code.");
         }
 
         user.setTwoFactorEnabled(true);
         users.save(user);
 
-        return new Msg("2fa enabled");
+        return new Msg("2FA enabled successfully.");
     }
 
     @PostMapping("/2fa/disable")
     public Msg disable2fa(Authentication auth) {
-        User user = getAuthenticatedUser(auth, HttpStatus.UNAUTHORIZED, "not authenticated", HttpStatus.NOT_FOUND, "user not found");
+        User user = getAuthenticatedUser(auth, HttpStatus.UNAUTHORIZED, "Not authenticated.", HttpStatus.NOT_FOUND, "User not found.");
 
         user.setTwoFactorEnabled(false);
         user.setTotpSecret(null);
         users.save(user);
 
-        return new Msg("2FA disabled successfully");
+        return new Msg("2FA disabled successfully.");
     }
 
     @PostMapping("/logout")
@@ -239,7 +265,7 @@ public class AuthController {
 
     @GetMapping("/me")
     public Object me(Authentication auth) {
-        User user = getAuthenticatedUser(auth, HttpStatus.UNAUTHORIZED, "not logged in", HttpStatus.UNAUTHORIZED, "user not found");
+        User user = getAuthenticatedUser(auth, HttpStatus.UNAUTHORIZED, "Not logged in.", HttpStatus.UNAUTHORIZED, "User not found.");
 
         return new Object() {
             public final Long id = user.getId();
@@ -255,22 +281,22 @@ public class AuthController {
 
     private void validateRegistration(String firstName, String lastName, String email, String password) {
         if (firstName.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "firstName required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "First name is required.");
         }
         if (lastName.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "lastName required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Last name is required.");
         }
         if (!isEmailValid(email)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid email");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a valid email.");
         }
         if (!isPasswordValid(password)) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "password must be at least 8 chars and include uppercase, number and special char"
+                    "Password must be at least 8 characters long and include an uppercase letter, a number, and a special character."
             );
         }
         if (users.existsByEmailIgnoreCase(email)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "email taken");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This email is already in use.");
         }
     }
 
@@ -305,7 +331,15 @@ public class AuthController {
         try {
             return googleAuthenticator.authorize(secret, Integer.parseInt(code));
         } catch (NumberFormatException e) {
-            throw new ResponseStatusException(status, "invalid 2fa code");
+            throw new ResponseStatusException(status, "Invalid 2FA code.");
+        }
+    }
+
+    private boolean authorizeTotpSafe(String secret, String code) {
+        try {
+            return googleAuthenticator.authorize(secret, Integer.parseInt(code));
+        } catch (Exception e) {
+            return false;
         }
     }
 

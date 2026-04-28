@@ -15,6 +15,7 @@ public record RoomInfoDto(
         List<String> photos,
         List<String> amenities,
         String boardType,
+        String paymentPolicy,
         Boolean refundable,
         String cancellationPolicy
 ) {}

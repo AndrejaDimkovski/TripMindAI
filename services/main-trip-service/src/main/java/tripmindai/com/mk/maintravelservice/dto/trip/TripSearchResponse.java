@@ -9,5 +9,10 @@ import java.util.List;
 public record TripSearchResponse(
         List<FlightOfferDto> flights,
         List<HotelSearchItemDto> hotels,
-        List<HotelOfferDto> hotelOffers
-) {}
+        List<HotelOfferDto> hotelOffers,
+        boolean flightsServiceAvailable,
+        boolean hotelsServiceAvailable,
+        String flightsMessage,
+        String hotelsMessage
+) {
+}

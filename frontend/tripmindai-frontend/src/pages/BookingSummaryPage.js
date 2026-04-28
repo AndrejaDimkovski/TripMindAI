@@ -23,6 +23,10 @@ function getPlannerRoute(flow) {
     return flow?.mode === "ai" ? "/plan/ai" : "/plan/manual";
 }
 
+function isHotelOnly(flow) {
+    return flow?.tripMode === "HOTEL_ONLY";
+}
+
 function fmtMoney(v) {
     const n = Number(v || 0);
     return Number.isFinite(n) ? n.toFixed(2) : "0.00";
@@ -148,12 +152,17 @@ function formatRoomType(value) {
 }
 
 function formatBoardType(value) {
-    if (!value || String(value).trim() === "") return "Room only";
+    if (!value || String(value).trim() === "") return null;
+    if (String(value).trim().toUpperCase() === "NONE") return null;
     return String(value).replaceAll("_", " ");
 }
 
 function formatPaymentPolicy(value) {
-    if (!value || String(value).trim() === "") return "None";
+    if (!value || String(value).trim() === "") return null;
+
+    const normalized = String(value).trim().toUpperCase();
+    if (normalized === "NONE" || normalized === "PAY_AT_PROPERTY") return null;
+
     return String(value).replaceAll("_", " ");
 }
 
@@ -276,7 +285,7 @@ export default function BookingSummaryPage() {
             return;
         }
 
-        if (current?.selectedFlightIndex == null) {
+        if (!isHotelOnly(current) && current?.selectedFlightIndex == null) {
             nav("/plan/flights", { replace: true });
             return;
         }
@@ -289,6 +298,7 @@ export default function BookingSummaryPage() {
         setFlow(current);
     }, [nav]);
 
+    const hotelOnly = isHotelOnly(flow);
     const searchResult = flow?.searchResult || null;
     const search = flow?.searchForm || {};
     const geo = {
@@ -346,8 +356,8 @@ export default function BookingSummaryPage() {
             totalPrice: selectedHotel.totalPrice || 0,
             currency: selectedHotel.currency || search?.targetCurrency || "EUR",
             roomType: null,
-            boardType: search?.boardType || "",
-            paymentPolicy: search?.paymentPolicy || "",
+            boardType: search?.boardType || null,
+            paymentPolicy: search?.paymentPolicy || null,
             refundable: null,
             refundLabel: null,
             roomQuantity: Number(search?.roomQuantity || 1),
@@ -368,9 +378,12 @@ export default function BookingSummaryPage() {
     const hotelCurrency = priceCurrency(selectedHotelOffer, null);
     const currency = search?.targetCurrency || flightCurrency || hotelCurrency || "EUR";
 
-    const flightPrice = priceAmount(selectedFlight);
+    const flightPrice = hotelOnly ? 0 : priceAmount(selectedFlight);
     const hotelPrice = priceAmount(selectedHotelOffer);
-    const total = flightPrice + hotelPrice;
+    const total = hotelOnly ? hotelPrice : flightPrice + hotelPrice;
+
+    const boardTypeText = formatBoardType(selectedHotelOffer?.boardType);
+    const paymentPolicyText = formatPaymentPolicy(selectedHotelOffer?.paymentPolicy);
 
     async function handleSavePlan() {
         try {
@@ -378,7 +391,8 @@ export default function BookingSummaryPage() {
             setSaveError("");
 
             const savePayload = {
-                origin: search?.origin || selectedFlight?.originIata || "",
+                tripMode: hotelOnly ? "HOTEL_ONLY" : "FLIGHT_HOTEL",
+                origin: hotelOnly ? null : (search?.origin || selectedFlight?.originIata || ""),
                 destinationCityCode: geo?.destination?.cityCode || selectedFlight?.destIata || "",
                 destinationName: geo?.destination?.name || "",
                 countryName: geo?.country || "",
@@ -392,21 +406,24 @@ export default function BookingSummaryPage() {
                 hotelCurrency: priceCurrency(selectedHotelOffer, currency),
                 hotelCheckInDate: selectedHotelOffer?.checkInDate || from || null,
                 hotelCheckOutDate: selectedHotelOffer?.checkOutDate || to || null,
-                boardType: selectedHotelOffer?.boardType || "",
-                paymentPolicy: selectedHotelOffer?.paymentPolicy || "",
+                boardType: selectedHotelOffer?.boardType || null,
+                paymentPolicy: selectedHotelOffer?.paymentPolicy || null,
                 roomQuantity: Number(selectedHotelOffer?.roomQuantity || search?.roomQuantity || 1),
 
-                flightAirlineCode: selectedFlight?.airlineCode || "",
-                flightOriginIata: selectedFlight?.originIata || "",
-                flightDestIata: selectedFlight?.destIata || "",
-                flightOriginCity: selectedFlight?.originCity || "",
-                flightDestinationCity: selectedFlight?.destCity || "",
-                flightDepartureAt: selectedFlight?.departureAt || "",
-                flightArrivalAt: selectedFlight?.arrivalAt || "",
-                flightStops: Number(selectedFlight?.stops || 0),
-                flightTripType: selectedFlight?.tripType || "",
-                flightPrice,
-                flightCurrency: priceCurrency(selectedFlight, currency),
+                flightAirlineCode: hotelOnly ? null : (selectedFlight?.airlineCode || ""),
+                flightAirlineName: hotelOnly ? null : (selectedFlight?.airlineName || ""),
+                flightOriginIata: hotelOnly ? null : (selectedFlight?.originIata || ""),
+                flightOriginCity: hotelOnly ? null : (selectedFlight?.originCity || ""),
+                flightDestIata: hotelOnly ? null : (selectedFlight?.destIata || ""),
+                flightDestinationCity: hotelOnly ? null : (selectedFlight?.destCity || ""),
+                flightDepartureAt: hotelOnly ? null : (selectedFlight?.departureAt || ""),
+                flightArrivalAt: hotelOnly ? null : (selectedFlight?.arrivalAt || ""),
+                returnFlightDepartureAt: hotelOnly ? null : (selectedFlight?.returnDepartureAt || null),
+                returnFlightArrivalAt: hotelOnly ? null : (selectedFlight?.returnArrivalAt || null),
+                flightStops: hotelOnly ? null : Number(selectedFlight?.stops || 0),
+                flightTripType: hotelOnly ? null : (selectedFlight?.tripType || ""),
+                flightPrice: hotelOnly ? 0 : flightPrice,
+                flightCurrency: hotelOnly ? null : priceCurrency(selectedFlight, currency),
 
                 totalPrice: total,
                 totalCurrency: currency,
@@ -439,19 +456,20 @@ export default function BookingSummaryPage() {
         );
     }
 
-    if (!selectedFlight || !selectedHotel) {
+    if ((!hotelOnly && !selectedFlight) || !selectedHotel) {
         return (
             <div className="min-h-screen bg-[#0b1620]">
                 <section className="relative min-h-screen overflow-hidden">
-                    <div className="absolute inset-0 bg-[linear-gradient(120deg,#0b1620_0%,#122234_48%,#17354a_100%)]" />
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.12),transparent_25%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_25%)]" />
+                    <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=1800&auto=format&fit=crop')] bg-cover bg-center" />
+                    <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(6,13,20,0.95)_0%,rgba(8,18,28,0.84)_34%,rgba(8,18,28,0.56)_70%,rgba(8,18,28,0.42)_100%)]" />
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.14),transparent_28%)]" />
 
                     <div className="relative z-10 mx-auto max-w-4xl px-4 py-24 lg:px-6">
                         <GlassSection title="Plan Trip" subtitle="Your booking summary is not ready yet.">
                             <div className="flex flex-col items-center justify-center py-6 text-center">
                                 <div className="text-5xl">🧳</div>
                                 <p className="mt-4 max-w-xl text-sm leading-7 text-white/75">
-                                    Нема избрано лет и хотел. Врати се назад и избери понуда.
+                                    Your plan is not fully selected yet. Go back and choose an option.
                                 </p>
                                 <HeroButton
                                     primary
@@ -471,12 +489,12 @@ export default function BookingSummaryPage() {
 
     return (
         <div className="min-h-screen bg-[#0b1620]">
-            <section className="relative overflow-hidden">
-                <div className="absolute inset-0 bg-[linear-gradient(120deg,#0b1620_0%,#122234_48%,#17354a_100%)]" />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.12),transparent_25%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_25%)]" />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_28%)]" />
+            <section className="relative min-h-screen overflow-hidden">
+                <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=1800&auto=format&fit=crop')] bg-cover bg-center" />
+                <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(6,13,20,0.95)_0%,rgba(8,18,28,0.84)_34%,rgba(8,18,28,0.56)_70%,rgba(8,18,28,0.42)_100%)]" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.14),transparent_28%)]" />
 
-                <div className="relative z-10 mx-auto w-full max-w-[1500px] px-4 pt-24 pb-14 lg:px-6">
+                <div className="relative z-10 mx-auto w-full max-w-[1500px] px-4 pb-16 pt-24 lg:px-6">
                     <div className="grid items-start gap-8 xl:grid-cols-[1.15fr_0.85fr]">
                         <div className="pt-6 lg:pt-8">
                             <HeroPill>Trip Summary</HeroPill>
@@ -486,12 +504,13 @@ export default function BookingSummaryPage() {
                             </h1>
 
                             <p className="mt-4 max-w-2xl text-sm leading-7 text-white/80 md:text-base">
-                                Review your selected flight, hotel and final trip total before saving the plan.
+                                Review your selected {hotelOnly ? "hotel" : "flight, hotel"} and final trip total before saving the plan.
                             </p>
 
                             <div className="mt-5 flex flex-wrap gap-2">
                                 <Badge tone="green">{displayValue(geo?.destination?.name, "Destination")}</Badge>
                                 <Badge tone="blue">{displayValue(geo?.country, "Country")}</Badge>
+                                <Badge tone="yellow">{hotelOnly ? "Hotel only" : "Flight + Hotel"}</Badge>
                                 <Badge tone="light">{adults} guest{adults > 1 ? "s" : ""}</Badge>
                                 {nights ? <Badge tone="yellow">{nights} night{nights > 1 ? "s" : ""}</Badge> : null}
                             </div>
@@ -523,11 +542,13 @@ export default function BookingSummaryPage() {
                                     <InfoTile label="Guests" value={adults} />
                                 </div>
 
-                                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                                    <InfoTile
-                                        label="Flight"
-                                        value={`${fmtMoney(flightPrice)} ${priceCurrency(selectedFlight, currency)}`}
-                                    />
+                                <div className={`mt-4 grid gap-3 ${hotelOnly ? "sm:grid-cols-1" : "sm:grid-cols-2"}`}>
+                                    {!hotelOnly ? (
+                                        <InfoTile
+                                            label="Flight"
+                                            value={`${fmtMoney(flightPrice)} ${priceCurrency(selectedFlight, currency)}`}
+                                        />
+                                    ) : null}
                                     <InfoTile
                                         label="Hotel"
                                         value={`${fmtMoney(hotelPrice)} ${priceCurrency(selectedHotelOffer, currency)}`}
@@ -555,75 +576,77 @@ export default function BookingSummaryPage() {
 
                     <div className="mt-8 grid gap-6 xl:grid-cols-[1.55fr_0.85fr]">
                         <div className="space-y-6">
-                            <GlassSection
-                                title="Flight selection"
-                                subtitle={selectedFlight?.airlineName || selectedFlight?.airlineCode || "Airline unavailable"}
-                            >
-                                <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                                    <div>
-                                        <div className="flex flex-wrap gap-2">
-                                            <Badge tone="green">{formatTripType(selectedFlight?.tripType)}</Badge>
-                                            <Badge tone="blue">{formatStops(selectedFlight?.stops)}</Badge>
-                                            {selectedFlight?.airlineCode ? (
-                                                <Badge tone="light">{selectedFlight.airlineCode}</Badge>
-                                            ) : null}
+                            {!hotelOnly ? (
+                                <GlassSection
+                                    title="Flight selection"
+                                    subtitle={selectedFlight?.airlineName || selectedFlight?.airlineCode || "Airline unavailable"}
+                                >
+                                    <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                        <div>
+                                            <div className="flex flex-wrap gap-2">
+                                                <Badge tone="green">{formatTripType(selectedFlight?.tripType)}</Badge>
+                                                <Badge tone="blue">{formatStops(selectedFlight?.stops)}</Badge>
+                                                {selectedFlight?.airlineCode ? (
+                                                    <Badge tone="light">{selectedFlight.airlineCode}</Badge>
+                                                ) : null}
+                                            </div>
+
+                                            <div className="mt-4 text-3xl font-bold text-white">
+                                                {displayValue(selectedFlight?.originIata)} → {displayValue(selectedFlight?.destIata)}
+                                            </div>
+
+                                            <div className="mt-2 text-sm text-white/70">
+                                                {displayValue(selectedFlight?.originCity || search?.origin, "Origin")} →{" "}
+                                                {displayValue(selectedFlight?.destCity || geo?.destination?.name, "Destination")}
+                                            </div>
                                         </div>
 
-                                        <div className="mt-4 text-3xl font-bold text-white">
-                                            {displayValue(selectedFlight?.originIata)} → {displayValue(selectedFlight?.destIata)}
-                                        </div>
-
-                                        <div className="mt-2 text-sm text-white/70">
-                                            {displayValue(selectedFlight?.originCity || search?.origin, "Origin")} →{" "}
-                                            {displayValue(selectedFlight?.destCity || geo?.destination?.name, "Destination")}
+                                        <div className="min-w-[220px]">
+                                            <PriceHighlight
+                                                label="Flight price"
+                                                value={`${fmtMoney(flightPrice)} ${priceCurrency(selectedFlight, currency)}`}
+                                                subtext="Selected flight total"
+                                            />
                                         </div>
                                     </div>
 
-                                    <div className="min-w-[220px]">
-                                        <PriceHighlight
-                                            label="Flight price"
-                                            value={`${fmtMoney(flightPrice)} ${priceCurrency(selectedFlight, currency)}`}
-                                            subtext="Selected flight total"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                                    <InfoTile label="Outbound departure" value={shortTime(selectedFlight?.departureAt)} />
-                                    <InfoTile label="Outbound arrival" value={shortTime(selectedFlight?.arrivalAt)} />
-                                    <InfoTile label="Trip type" value={formatTripType(selectedFlight?.tripType)} />
-                                    <InfoTile label="Stops" value={formatStops(selectedFlight?.stops)} />
-                                    <InfoTile
-                                        label="Dates"
-                                        value={`${formatDateDisplay(from)} → ${formatDateDisplay(to)}`}
-                                    />
-                                    <InfoTile
-                                        label="Guests / Nights"
-                                        value={`${adults}${nights ? ` · ${nights} night${nights > 1 ? "s" : ""}` : ""}`}
-                                    />
-                                    <InfoTile
-                                        label="Carrier"
-                                        value={selectedFlight?.airlineName || selectedFlight?.airlineCode}
-                                    />
-                                </div>
-
-                                {selectedFlight?.tripType === "ROUND_TRIP" ? (
-                                    <div className="mt-5 grid gap-3 md:grid-cols-2">
+                                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                        <InfoTile label="Outbound departure" value={shortTime(selectedFlight?.departureAt)} />
+                                        <InfoTile label="Outbound arrival" value={shortTime(selectedFlight?.arrivalAt)} />
+                                        <InfoTile label="Trip type" value={formatTripType(selectedFlight?.tripType)} />
+                                        <InfoTile label="Stops" value={formatStops(selectedFlight?.stops)} />
                                         <InfoTile
-                                            label="Outbound ticket"
-                                            value={`${shortTime(selectedFlight?.departureAt)} → ${shortTime(selectedFlight?.arrivalAt)}`}
+                                            label="Dates"
+                                            value={`${formatDateDisplay(from)} → ${formatDateDisplay(to)}`}
                                         />
                                         <InfoTile
-                                            label="Return ticket"
-                                            value={
-                                                selectedFlight?.returnDepartureAt || selectedFlight?.returnArrivalAt
-                                                    ? `${shortTime(selectedFlight?.returnDepartureAt)} → ${shortTime(selectedFlight?.returnArrivalAt)}`
-                                                    : "—"
-                                            }
+                                            label="Guests / Nights"
+                                            value={`${adults}${nights ? ` · ${nights} night${nights > 1 ? "s" : ""}` : ""}`}
+                                        />
+                                        <InfoTile
+                                            label="Carrier"
+                                            value={selectedFlight?.airlineName || selectedFlight?.airlineCode}
                                         />
                                     </div>
-                                ) : null}
-                            </GlassSection>
+
+                                    {selectedFlight?.tripType === "ROUND_TRIP" ? (
+                                        <div className="mt-5 grid gap-3 md:grid-cols-2">
+                                            <InfoTile
+                                                label="Outbound ticket"
+                                                value={`${shortTime(selectedFlight?.departureAt)} → ${shortTime(selectedFlight?.arrivalAt)}`}
+                                            />
+                                            <InfoTile
+                                                label="Return ticket"
+                                                value={
+                                                    selectedFlight?.returnDepartureAt || selectedFlight?.returnArrivalAt
+                                                        ? `${shortTime(selectedFlight?.returnDepartureAt)} → ${shortTime(selectedFlight?.returnArrivalAt)}`
+                                                        : "—"
+                                                }
+                                            />
+                                        </div>
+                                    ) : null}
+                                </GlassSection>
+                            ) : null}
 
                             <GlassSection
                                 title="Hotel selection"
@@ -633,7 +656,7 @@ export default function BookingSummaryPage() {
                                     <div>
                                         <div className="flex flex-wrap gap-2">
                                             <Badge tone="green">{formatRefundLabel(selectedHotelOffer)}</Badge>
-                                            <Badge tone="blue">{formatBoardType(selectedHotelOffer?.boardType)}</Badge>
+                                            {boardTypeText ? <Badge tone="blue">{boardTypeText}</Badge> : null}
                                             <Badge tone="light">{formatRoomType(selectedHotelOffer?.roomType)}</Badge>
                                             {selectedHotel?.reviewScore ? (
                                                 <Badge tone="yellow">{formatHotelRating(selectedHotel)}</Badge>
@@ -673,12 +696,11 @@ export default function BookingSummaryPage() {
                                     <InfoTile label="Nights" value={nights || "—"} />
                                     <InfoTile label="Rating" value={formatHotelRating(selectedHotel)} />
                                     <InfoTile label="Room" value={formatRoomType(selectedHotelOffer?.roomType)} />
-                                    <InfoTile label="Board" value={formatBoardType(selectedHotelOffer?.boardType)} />
+                                    {boardTypeText ? <InfoTile label="Board" value={boardTypeText} /> : null}
                                     <InfoTile label="Refund policy" value={formatRefundLabel(selectedHotelOffer)} />
-                                    <InfoTile
-                                        label="Payment policy"
-                                        value={formatPaymentPolicy(selectedHotelOffer?.paymentPolicy)}
-                                    />
+                                    {paymentPolicyText ? (
+                                        <InfoTile label="Payment policy" value={paymentPolicyText} />
+                                    ) : null}
                                 </div>
                             </GlassSection>
                         </div>
@@ -693,25 +715,31 @@ export default function BookingSummaryPage() {
                                             label="Travel dates"
                                             value={`${formatDateDisplay(from)} → ${formatDateDisplay(to)}`}
                                         />
-                                        <InfoTile
-                                            label="Flight route"
-                                            value={`${displayValue(selectedFlight?.originIata)} → ${displayValue(selectedFlight?.destIata)}`}
-                                        />
-                                        <InfoTile
-                                            label="Flight schedule"
-                                            value={`${shortTime(selectedFlight?.departureAt)} → ${shortTime(selectedFlight?.arrivalAt)}`}
-                                        />
-                                        <InfoTile
-                                            label="Return schedule"
-                                            value={
-                                                selectedFlight?.returnDepartureAt || selectedFlight?.returnArrivalAt
-                                                    ? `${shortTime(selectedFlight?.returnDepartureAt)} → ${shortTime(selectedFlight?.returnArrivalAt)}`
-                                                    : "—"
-                                            }
-                                        />
+                                        {!hotelOnly ? (
+                                            <>
+                                                <InfoTile
+                                                    label="Flight route"
+                                                    value={`${displayValue(selectedFlight?.originIata)} → ${displayValue(selectedFlight?.destIata)}`}
+                                                />
+                                                <InfoTile
+                                                    label="Flight schedule"
+                                                    value={`${shortTime(selectedFlight?.departureAt)} → ${shortTime(selectedFlight?.arrivalAt)}`}
+                                                />
+                                                <InfoTile
+                                                    label="Return schedule"
+                                                    value={
+                                                        selectedFlight?.returnDepartureAt || selectedFlight?.returnArrivalAt
+                                                            ? `${shortTime(selectedFlight?.returnDepartureAt)} → ${shortTime(selectedFlight?.returnArrivalAt)}`
+                                                            : "—"
+                                                    }
+                                                />
+                                            </>
+                                        ) : null}
                                         <InfoTile label="Hotel" value={selectedHotel?.name || selectedHotelOffer?.hotelName} />
                                         <InfoTile label="Hotel rating" value={formatHotelRating(selectedHotel)} />
                                         <InfoTile label="Guests / Nights" value={`${adults} · ${nights || "—"}`} />
+                                        {boardTypeText ? <InfoTile label="Board" value={boardTypeText} /> : null}
+                                        {paymentPolicyText ? <InfoTile label="Payment policy" value={paymentPolicyText} /> : null}
                                     </div>
                                 </GlassSection>
 
@@ -719,7 +747,11 @@ export default function BookingSummaryPage() {
                                     <PriceHighlight
                                         label="Grand total"
                                         value={`${fmtMoney(total)} ${currency}`}
-                                        subtext={`Flight ${fmtMoney(flightPrice)} ${priceCurrency(selectedFlight, currency)} + Hotel ${fmtMoney(hotelPrice)} ${priceCurrency(selectedHotelOffer, currency)}`}
+                                        subtext={
+                                            hotelOnly
+                                                ? `Hotel ${fmtMoney(hotelPrice)} ${priceCurrency(selectedHotelOffer, currency)}`
+                                                : `Flight ${fmtMoney(flightPrice)} ${priceCurrency(selectedFlight, currency)} + Hotel ${fmtMoney(hotelPrice)} ${priceCurrency(selectedHotelOffer, currency)}`
+                                        }
                                     />
 
                                     <div className="mt-4 flex flex-col gap-3">

@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 public record TripPlanDto(
         Long id,
         String username,
+        String tripMode,
         String origin,
         String destinationCityCode,
         String destinationName,
@@ -13,10 +14,17 @@ public record TripPlanDto(
         LocalDate fromDate,
         LocalDate toDate,
         Integer adults,
+
         String hotelId,
         String hotelName,
         Double hotelPrice,
         String hotelCurrency,
+        LocalDate hotelCheckInDate,
+        LocalDate hotelCheckOutDate,
+        String boardType,
+        String paymentPolicy,
+        Integer roomQuantity,
+
         String flightAirlineCode,
         String flightAirlineName,
         String flightOriginIata,
@@ -25,10 +33,13 @@ public record TripPlanDto(
         String flightDestinationCity,
         String flightDepartureAt,
         String flightArrivalAt,
+        String returnFlightDepartureAt,
+        String returnFlightArrivalAt,
         Integer flightStops,
         String flightTripType,
         Double flightPrice,
         String flightCurrency,
+
         Double totalPrice,
         String totalCurrency,
         LocalDateTime createdAt

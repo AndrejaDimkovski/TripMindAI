@@ -50,7 +50,7 @@ public class HotelsClient {
 
             return result != null ? result : List.of();
         } catch (Exception e) {
-            return List.of();
+            throw new RuntimeException("Hotels destinations request failed", e);
         }
     }
 
@@ -99,7 +99,7 @@ public class HotelsClient {
                     ? result
                     : emptySearchResponse(destId, destType, checkIn, checkOut, adults, pageNo);
         } catch (Exception e) {
-            return emptySearchResponse(destId, destType, checkIn, checkOut, adults, pageNo);
+            throw new RuntimeException("Hotels search request failed", e);
         }
     }
 
@@ -127,7 +127,7 @@ public class HotelsClient {
         try {
             return restTemplate.getForObject(builder.toUriString(), HotelDetailsDto.class);
         } catch (Exception e) {
-            return null;
+            throw new RuntimeException("Hotel details request failed", e);
         }
     }
 
@@ -155,7 +155,7 @@ public class HotelsClient {
         try {
             return restTemplate.getForObject(builder.toUriString(), HotelFullDetailsDto.class);
         } catch (Exception e) {
-            return null;
+            throw new RuntimeException("Hotel full details request failed", e);
         }
     }
 

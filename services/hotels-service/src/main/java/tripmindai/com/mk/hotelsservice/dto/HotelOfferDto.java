@@ -7,18 +7,24 @@ public record HotelOfferDto(
         String hotelName,
         String checkInDate,
         String checkOutDate,
+
         double totalPrice,
         String currency,
+
         Double taxAmount,
         Double totalWithTaxes,
+
         String offerId,
+
         String roomType,
         String roomCategory,
         String roomDescription,
+
         Integer beds,
         String bedType,
 
         String boardType,
+        String paymentPolicy,
         Boolean refundable,
         String cancellationPolicy,
 

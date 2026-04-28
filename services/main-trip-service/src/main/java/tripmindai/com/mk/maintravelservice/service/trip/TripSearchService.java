@@ -18,7 +18,6 @@ import tripmindai.com.mk.maintravelservice.dto.hotels.HotelSearchItemDto;
 import tripmindai.com.mk.maintravelservice.dto.hotels.HotelSearchResponseDto;
 import tripmindai.com.mk.maintravelservice.dto.hotels.RoomInfoDto;
 import tripmindai.com.mk.maintravelservice.dto.trip.TripSearchResponse;
-import tripmindai.com.mk.maintravelservice.service.CurrencyConversionService;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
@@ -108,19 +107,22 @@ public class TripSearchService {
         int safeRoomQuantity = roomQuantity == null ? 1 : Math.max(1, roomQuantity);
         String normalizedTargetCurrency = currencyConversionService.normalizeTargetCurrency(targetCurrency);
 
-        CompletableFuture<List<FlightOfferDto>> flightsFuture = CompletableFuture.supplyAsync(
+        CompletableFuture<FlightsSearchResult> flightsFuture = CompletableFuture.supplyAsync(
                 () -> safeFlightsSearch(origin, destination, checkInStr, returnDate, safeAdults),
                 tripSearchExecutor
         );
 
-        CompletableFuture<HotelSearchResponseDto> hotelsFuture = CompletableFuture.supplyAsync(
+        CompletableFuture<HotelsSearchResult> hotelsFuture = CompletableFuture.supplyAsync(
                 () -> safeHotelsSearch(destination, cityCode, checkInStr, checkOutStr, safeAdults, priceRange),
                 tripSearchExecutor
         );
 
-        List<FlightOfferDto> flights = flightsFuture.join();
-        HotelSearchResponseDto hotelSearchResponse = hotelsFuture.join();
+        FlightsSearchResult flightsResult = flightsFuture.join();
+        HotelsSearchResult hotelsResult = hotelsFuture.join();
 
+        List<FlightOfferDto> flights = flightsResult.flights();
+
+        HotelSearchResponseDto hotelSearchResponse = hotelsResult.response();
         List<HotelSearchItemDto> hotels = hotelSearchResponse != null && hotelSearchResponse.hotels() != null
                 ? hotelSearchResponse.hotels()
                 : List.of();
@@ -138,11 +140,15 @@ public class TripSearchService {
         hotelOffers = pickCheapestOfferPerHotelWithinBudget(hotelOffers, priceRange);
         hotels = keepOnlyHotelsWithMatchingOffers(hotels, hotelOffers);
 
-        if (hotels.isEmpty()) {
-            return new TripSearchResponse(flights, List.of(), List.of());
-        }
-
-        return new TripSearchResponse(flights, hotels, hotelOffers);
+        return new TripSearchResponse(
+                flights,
+                hotels,
+                hotelOffers,
+                flightsResult.serviceAvailable(),
+                hotelsResult.serviceAvailable(),
+                flightsResult.message(),
+                hotelsResult.message()
+        );
     }
 
     public HotelDetailsDto hotelDetails(
@@ -199,7 +205,7 @@ public class TripSearchService {
         return isBlank(token) ? null : flightsClient.getDetails(token);
     }
 
-    private List<FlightOfferDto> safeFlightsSearch(
+    private FlightsSearchResult safeFlightsSearch(
             String origin,
             String destination,
             String checkIn,
@@ -208,13 +214,23 @@ public class TripSearchService {
     ) {
         try {
             List<FlightOfferDto> result = flightsClient.search(origin, destination, checkIn, returnDate, adults);
-            return result != null ? result : List.of();
+
+            return new FlightsSearchResult(
+                    result != null ? result : List.of(),
+                    true,
+                    null
+            );
         } catch (Exception e) {
-            return List.of();
+            System.out.println("TripSearchService: flights search failed: " + e.getMessage());
+            return new FlightsSearchResult(
+                    List.of(),
+                    false,
+                    "Flight service is temporarily unavailable. Please try again later."
+            );
         }
     }
 
-    private HotelSearchResponseDto safeHotelsSearch(
+    private HotelsSearchResult safeHotelsSearch(
             String destination,
             String cityCode,
             String checkIn,
@@ -225,10 +241,25 @@ public class TripSearchService {
         try {
             String hotelQuery = firstNonBlank(cityCode, destination);
             List<DestinationSearchDto> destinations = hotelsClient.searchDestinations(hotelQuery);
+
+            if (destinations == null || destinations.isEmpty()) {
+                System.out.println("TripSearchService: hotel destination search returned no destinations.");
+                return new HotelsSearchResult(
+                        buildEmptyHotelSearch(checkIn, checkOut, adults),
+                        true,
+                        null
+                );
+            }
+
             DestinationSearchDto best = pickBestDestination(destinations, destination);
 
             if (best == null || isBlank(best.destId()) || isBlank(best.destType())) {
-                return buildEmptyHotelSearch(checkIn, checkOut, adults);
+                System.out.println("TripSearchService: hotel destination mapping returned no usable result.");
+                return new HotelsSearchResult(
+                        buildEmptyHotelSearch(checkIn, checkOut, adults),
+                        true,
+                        null
+                );
             }
 
             HotelSearchResponseDto response = hotelsClient.searchHotels(
@@ -241,9 +272,18 @@ public class TripSearchService {
                     priceRange
             );
 
-            return response != null ? response : buildEmptyHotelSearch(checkIn, checkOut, adults);
+            return new HotelsSearchResult(
+                    response != null ? response : buildEmptyHotelSearch(checkIn, checkOut, adults),
+                    true,
+                    null
+            );
         } catch (Exception e) {
-            return buildEmptyHotelSearch(checkIn, checkOut, adults);
+            System.out.println("TripSearchService: hotels search failed: " + e.getMessage());
+            return new HotelsSearchResult(
+                    buildEmptyHotelSearch(checkIn, checkOut, adults),
+                    false,
+                    "Hotel service is temporarily unavailable. Please try again later."
+            );
         }
     }
 
@@ -339,6 +379,7 @@ public class TripSearchService {
                     totalPrice,
                     "SEARCH-" + item.hotelId(),
                     "Cheapest matching room",
+                    null,
                     null,
                     null,
                     null,
@@ -644,6 +685,20 @@ public class TripSearchService {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private record FlightsSearchResult(
+            List<FlightOfferDto> flights,
+            boolean serviceAvailable,
+            String message
+    ) {
+    }
+
+    private record HotelsSearchResult(
+            HotelSearchResponseDto response,
+            boolean serviceAvailable,
+            String message
+    ) {
     }
 
     private record PriceBounds(Double min, Double max) {

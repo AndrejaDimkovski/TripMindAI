@@ -43,12 +43,12 @@ export default function RegisterPage() {
         e.preventDefault();
         setErr("");
 
-        if (!form.firstName.trim()) return setErr("Внеси first name.");
-        if (!form.lastName.trim()) return setErr("Внеси last name.");
-        if (!form.email.trim()) return setErr("Внеси email.");
-        if (!form.password) return setErr("Внеси password.");
-        if (form.password.length < 8) return setErr("Password нека биде барем 8 карактери.");
-        if (form.password !== form.confirm) return setErr("Passwords не се исти.");
+        if (!form.firstName.trim()) return setErr("Enter your first name.");
+        if (!form.lastName.trim()) return setErr("Enter your last name.");
+        if (!form.email.trim()) return setErr("Enter your email.");
+        if (!form.password) return setErr("Enter your password.");
+        if (form.password.length < 8) return setErr("Password must be at least 8 characters long.");
+        if (form.password !== form.confirm) return setErr("Passwords do not match.");
 
         setLoading(true);
         try {
@@ -64,7 +64,7 @@ export default function RegisterPage() {
                 state: { email: form.email.trim() },
             });
         } catch (e2) {
-            setErr(e2?.message || "Register не успеа.");
+            setErr(e2?.message || "Registration failed.");
         } finally {
             setLoading(false);
         }
@@ -105,8 +105,12 @@ export default function RegisterPage() {
                                     <GlassPanel className="p-6 text-white lg:p-8">
                                         <div className="mb-8 flex items-start justify-between gap-4">
                                             <div className="flex items-center gap-3">
-                                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/90 text-lg font-bold text-slate-900 shadow-lg">
-                                                    TM
+                                                <div className="flex h-13 w-13 items-center justify-center overflow-hidden">
+                                                    <img
+                                                        src="/web-app-manifest-512x512.png"
+                                                        alt="TripMindAI logo"
+                                                        className="h-14 w-14 object-contain"
+                                                    />
                                                 </div>
 
                                                 <div>
@@ -129,7 +133,7 @@ export default function RegisterPage() {
                                         <form onSubmit={onSubmit} className="space-y-5">
                                             {err ? (
                                                 <div className="rounded-2xl border border-rose-300/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
-                                                    ⚠️ {err}
+                                                    {err}
                                                 </div>
                                             ) : null}
 
@@ -193,7 +197,7 @@ export default function RegisterPage() {
 
                                                 <div>
                                                     <label className="mb-2 block text-sm font-medium text-white/85">
-                                                        Confirm
+                                                        Confirm password
                                                     </label>
                                                     <input
                                                         type={showPw ? "text" : "password"}

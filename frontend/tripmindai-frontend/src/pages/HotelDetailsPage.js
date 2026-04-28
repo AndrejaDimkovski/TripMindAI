@@ -116,7 +116,7 @@ function offerComparePrice(offer) {
 }
 
 function inferBoardType(block) {
-    if (!block) return "";
+    if (!block) return null;
 
     if (Number(block.all_inclusive) === 1) return "ALL_INCLUSIVE";
     if (Number(block.full_board) === 1) return "FULL_BOARD";
@@ -126,7 +126,7 @@ function inferBoardType(block) {
     const mealplan = String(block.mealplan || "").toLowerCase();
     if (mealplan.includes("no meal option")) return "ROOM_ONLY";
 
-    return "";
+    return null;
 }
 
 function inferPaymentPolicy(block, paymentFeatures) {
@@ -140,17 +140,20 @@ function inferPaymentPolicy(block, paymentFeatures) {
     }
 
     if (paymentFeatures?.payAtProperty === true) {
-        return "NONE";
+        return null;
     }
 
-    return "NONE";
+    return null;
 }
 
 function boardTypeLabel(value) {
+    if (!value || String(value).trim() === "") return null;
+
     switch (value) {
         case "ROOM_ONLY":
             return "Room only";
         case "BREAKFAST":
+        case "BREAKFAST_INCLUDED":
             return "Breakfast included";
         case "HALF_BOARD":
             return "Half board";
@@ -159,19 +162,24 @@ function boardTypeLabel(value) {
         case "ALL_INCLUSIVE":
             return "All inclusive";
         default:
-            return "Not specified";
+            return String(value).replaceAll("_", " ");
     }
 }
 
 function paymentPolicyLabel(value) {
+    if (!value || String(value).trim() === "") return null;
+
     switch (value) {
         case "DEPOSIT":
+        case "PREPAYMENT_REQUIRED":
             return "Prepayment required";
         case "GUARANTEE":
             return "Guarantee";
         case "NONE":
+        case "PAY_AT_PROPERTY":
+            return null;
         default:
-            return "Pay at property / not specified";
+            return String(value).replaceAll("_", " ");
     }
 }
 
@@ -285,8 +293,8 @@ function CheapestOfferCard({
                 <Badge tone="green">Cheapest matching room</Badge>
                 {offer?.roomType ? <Badge tone="light">{offer.roomType}</Badge> : null}
                 {offer?.roomCategory ? <Badge tone="blue">{offer.roomCategory}</Badge> : null}
-                <Badge tone="light">Board: {derivedBoardType}</Badge>
-                <Badge tone="yellow">{derivedPaymentPolicy}</Badge>
+                {derivedBoardType ? <Badge tone="light">Board: {derivedBoardType}</Badge> : null}
+                {derivedPaymentPolicy ? <Badge tone="yellow">{derivedPaymentPolicy}</Badge> : null}
                 {offer?.refundLabel ? (
                     <Badge tone="blue">{offer.refundLabel}</Badge>
                 ) : offer?.refundable != null ? (
@@ -301,7 +309,7 @@ function CheapestOfferCard({
             {nightly ? <div className="mt-1 text-sm text-white/75">{nightly}</div> : null}
             {taxes ? <div className="mt-1 text-sm text-white/75">Taxes: {taxes}</div> : null}
 
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className={`mt-4 grid gap-3 ${derivedBoardType || derivedPaymentPolicy || mealplanText ? "md:grid-cols-2" : ""}`}>
                 <InfoTile
                     label="Stay"
                     value={`${formatDateDisplay(offer?.checkInDate || bookingFrom)} → ${formatDateDisplay(offer?.checkOutDate || bookingTo)}`}
@@ -311,9 +319,9 @@ function CheapestOfferCard({
                     value={`${offer?.adults || adults} guests${(offer?.nights || nights) ? ` · ${offer?.nights || nights} nights` : ""}`}
                 />
                 <InfoTile label="Room quantity" value={offer?.roomQuantity || 1} />
-                <InfoTile label="Board type" value={derivedBoardType} />
-                <InfoTile label="Payment policy" value={derivedPaymentPolicy} />
-                <InfoTile label="Meal plan note" value={mealplanText} />
+                {derivedBoardType ? <InfoTile label="Board type" value={derivedBoardType} /> : null}
+                {derivedPaymentPolicy ? <InfoTile label="Payment policy" value={derivedPaymentPolicy} /> : null}
+                {mealplanText ? <InfoTile label="Meal plan note" value={mealplanText} /> : null}
             </div>
 
             {offer?.cancellationPolicy ? (
@@ -342,8 +350,8 @@ function RoomCard({ room, derivedBoardType, derivedPaymentPolicy, mealplanText }
                         {room.roomSize} {room.roomSizeUnit || "m²"}
                     </Badge>
                 ) : null}
-                <Badge tone="light">Board: {derivedBoardType}</Badge>
-                <Badge tone="yellow">{derivedPaymentPolicy}</Badge>
+                {derivedBoardType ? <Badge tone="light">Board: {derivedBoardType}</Badge> : null}
+                {derivedPaymentPolicy ? <Badge tone="yellow">{derivedPaymentPolicy}</Badge> : null}
                 {room?.refundable != null ? (
                     <Badge tone={room.refundable ? "green" : "yellow"}>
                         {room.refundable ? "Refundable" : "Non-refundable"}
@@ -351,11 +359,13 @@ function RoomCard({ room, derivedBoardType, derivedPaymentPolicy, mealplanText }
                 ) : null}
             </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-                <InfoTile label="Board type" value={derivedBoardType} />
-                <InfoTile label="Payment policy" value={derivedPaymentPolicy} />
-                <InfoTile label="Meal plan note" value={mealplanText} />
-            </div>
+            {(derivedBoardType || derivedPaymentPolicy || mealplanText) ? (
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    {derivedBoardType ? <InfoTile label="Board type" value={derivedBoardType} /> : null}
+                    {derivedPaymentPolicy ? <InfoTile label="Payment policy" value={derivedPaymentPolicy} /> : null}
+                    {mealplanText ? <InfoTile label="Meal plan note" value={mealplanText} /> : null}
+                </div>
+            ) : null}
 
             {room?.description ? (
                 <p className="mt-4 text-sm leading-7 text-white/80">{room.description}</p>
@@ -442,12 +452,12 @@ export default function HotelDetailsPage() {
                 });
 
                 if (!active) return;
-                if (!data) throw new Error("Празен одговор за хотел детали.");
+                if (!data) throw new Error("Hotel details response was empty.");
 
                 setDetails(data);
             } catch (e) {
                 if (!active) return;
-                setError(e?.message || "Грешка");
+                setError(e?.message || "Failed to load hotel details.");
             } finally {
                 if (active) setLoading(false);
             }
@@ -560,9 +570,17 @@ export default function HotelDetailsPage() {
         [hotelName, lat, lng]
     );
 
-    const derivedBoardType = boardTypeLabel(inferBoardType(primaryBlock));
-    const derivedPaymentPolicy = paymentPolicyLabel(inferPaymentPolicy(primaryBlock, paymentFeatures));
-    const mealplanText = primaryBlock?.mealplan || "Not specified";
+    const derivedBoardType =
+        boardTypeLabel(primaryOffer?.boardType) ||
+        boardTypeLabel(roomsData?.[0]?.boardType) ||
+        boardTypeLabel(inferBoardType(primaryBlock));
+
+    const derivedPaymentPolicy =
+        paymentPolicyLabel(primaryOffer?.paymentPolicy) ||
+        paymentPolicyLabel(roomsData?.[0]?.paymentPolicy) ||
+        paymentPolicyLabel(inferPaymentPolicy(primaryBlock, paymentFeatures));
+
+    const mealplanText = primaryBlock?.mealplan || null;
 
     function back() {
         nav(-1);
@@ -620,22 +638,14 @@ export default function HotelDetailsPage() {
         return `${formatMoney(amount)} ${currency}`;
     }
 
-    const heroImage =
-        stateHotel?.photoUrl ||
-        hotelPhotos[0] ||
-        "https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=1800&auto=format&fit=crop";
-
     return (
         <div className="min-h-screen bg-[#0b1620]">
-            <section className="relative overflow-hidden">
-                <div
-                    className="absolute inset-0 bg-cover bg-center"
-                    style={{ backgroundImage: `url('${heroImage}')` }}
-                />
+            <section className="relative min-h-screen overflow-hidden">
+                <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=1800&auto=format&fit=crop')] bg-cover bg-center" />
                 <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(6,13,20,0.95)_0%,rgba(8,18,28,0.84)_34%,rgba(8,18,28,0.56)_70%,rgba(8,18,28,0.42)_100%)]" />
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.14),transparent_28%)]" />
 
-                <div className="relative z-10 mx-auto max-w-[1500px] px-4 pb-12 pt-24 lg:px-6">
+                <div className="relative z-10 mx-auto max-w-[1500px] px-4 pb-16 pt-24 lg:px-6">
                     <div className="grid items-start gap-8 xl:grid-cols-[1.18fr_0.82fr]">
                         <div className="pt-6 lg:pt-8">
                             <HeroPill>Hotel Details</HeroPill>
@@ -656,8 +666,8 @@ export default function HotelDetailsPage() {
                                 {descriptionInfo?.accommodationType ? (
                                     <Badge tone="blue">{descriptionInfo.accommodationType}</Badge>
                                 ) : null}
-                                <Badge tone="light">{derivedBoardType}</Badge>
-                                <Badge tone="yellow">{derivedPaymentPolicy}</Badge>
+                                {derivedBoardType ? <Badge tone="light">{derivedBoardType}</Badge> : null}
+                                {derivedPaymentPolicy ? <Badge tone="yellow">{derivedPaymentPolicy}</Badge> : null}
                             </div>
 
                             <div className="mt-8 flex flex-wrap gap-3">
@@ -712,8 +722,8 @@ export default function HotelDetailsPage() {
                                     <InfoTile label="Guests" value={adults} />
                                     <InfoTile label="Rooms" value={roomCount} />
                                     <InfoTile label="Nights" value={nights || "—"} />
-                                    <InfoTile label="Board type" value={derivedBoardType} />
-                                    <InfoTile label="Payment policy" value={derivedPaymentPolicy} />
+                                    {derivedBoardType ? <InfoTile label="Board type" value={derivedBoardType} /> : null}
+                                    {derivedPaymentPolicy ? <InfoTile label="Payment policy" value={derivedPaymentPolicy} /> : null}
                                 </div>
 
                                 {primaryOffer ? (
@@ -731,298 +741,309 @@ export default function HotelDetailsPage() {
                                         ) : null}
                                     </div>
                                 ) : null}
+
+                                <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-500/15 p-4">
+                                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-100">
+                                        Price notice
+                                    </div>
+                                    <div className="mt-2 text-sm leading-6 text-white/80">
+                                        Displayed hotel prices are indicative and may differ from the final provider offer at booking time.
+                                    </div>
+                                </div>
                             </GlassPanel>
                         </aside>
                     </div>
-                </div>
-            </section>
 
-            <section className="relative z-10 mx-auto max-w-[1500px] px-4 pb-16 lg:px-6">
-                {error ? (
-                    <div className="mb-6 rounded-2xl border border-rose-300/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100 backdrop-blur">
-                        ⚠️ {error}
-                    </div>
-                ) : null}
+                    {error ? (
+                        <div className="mt-8 rounded-2xl border border-rose-300/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100 backdrop-blur">
+                            ⚠️ {error}
+                        </div>
+                    ) : null}
 
-                {loading ? (
-                    <GlassPanel className="p-6 text-white">
-                        <div className="text-sm text-white/80">Loading hotel details...</div>
-                    </GlassPanel>
-                ) : null}
+                    {loading ? (
+                        <div className="mt-8">
+                            <GlassPanel className="p-6 text-white">
+                                <div className="text-sm text-white/80">Loading hotel details...</div>
+                            </GlassPanel>
+                        </div>
+                    ) : null}
 
-                {!loading ? (
-                    <div className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
-                        <div className="space-y-6">
-                            <GlassSection title="About this hotel" subtitle="Description and key information">
-                                <p className="text-sm leading-8 text-white/80">{desc}</p>
+                    {!loading ? (
+                        <div className="mt-8 grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
+                            <div className="space-y-6">
+                                <GlassSection title="About this hotel" subtitle="Description and key information">
+                                    <p className="text-sm leading-8 text-white/80">{desc}</p>
 
-                                <div className="mt-5 grid gap-3 md:grid-cols-3">
-                                    <InfoTile label="Board type" value={derivedBoardType} />
-                                    <InfoTile label="Payment policy" value={derivedPaymentPolicy} />
-                                    <InfoTile label="Meal plan note" value={mealplanText} />
-                                </div>
+                                    {(derivedBoardType || derivedPaymentPolicy || mealplanText) ? (
+                                        <div className="mt-5 grid gap-3 md:grid-cols-3">
+                                            {derivedBoardType ? <InfoTile label="Board type" value={derivedBoardType} /> : null}
+                                            {derivedPaymentPolicy ? <InfoTile label="Payment policy" value={derivedPaymentPolicy} /> : null}
+                                            {mealplanText ? <InfoTile label="Meal plan note" value={mealplanText} /> : null}
+                                        </div>
+                                    ) : null}
 
-                                {(descriptionInfo?.spokenLanguages || descriptionInfo?.importantInfo) ? (
-                                    <div className="mt-5 grid gap-3 md:grid-cols-2">
-                                        {descriptionInfo?.spokenLanguages ? (
-                                            <InfoTile label="Languages" value={descriptionInfo.spokenLanguages} />
-                                        ) : null}
-                                        {descriptionInfo?.importantInfo ? (
-                                            <InfoTile label="Important info" value={descriptionInfo.importantInfo} />
-                                        ) : null}
-                                    </div>
-                                ) : null}
+                                    {(descriptionInfo?.spokenLanguages || descriptionInfo?.importantInfo) ? (
+                                        <div className="mt-5 grid gap-3 md:grid-cols-2">
+                                            {descriptionInfo?.spokenLanguages ? (
+                                                <InfoTile label="Languages" value={descriptionInfo.spokenLanguages} />
+                                            ) : null}
+                                            {descriptionInfo?.importantInfo ? (
+                                                <InfoTile label="Important info" value={descriptionInfo.importantInfo} />
+                                            ) : null}
+                                        </div>
+                                    ) : null}
 
-                                {Array.isArray(descriptionInfo?.highlights) && descriptionInfo.highlights.length > 0 ? (
-                                    <div className="mt-4 flex flex-wrap gap-2">
-                                        {descriptionInfo.highlights.map((item, i) => (
-                                            <Badge key={`${item}-${i}`} tone="light">
-                                                {item}
-                                            </Badge>
-                                        ))}
-                                    </div>
-                                ) : null}
-                            </GlassSection>
+                                    {Array.isArray(descriptionInfo?.highlights) && descriptionInfo.highlights.length > 0 ? (
+                                        <div className="mt-4 flex flex-wrap gap-2">
+                                            {descriptionInfo.highlights.map((item, i) => (
+                                                <Badge key={`${item}-${i}`} tone="light">
+                                                    {item}
+                                                </Badge>
+                                            ))}
+                                        </div>
+                                    ) : null}
+                                </GlassSection>
 
-                            <GlassSection title="Amenities" subtitle="Hotel amenities from main details">
-                                {amenities.length > 0 ? (
-                                    <div className="flex flex-wrap gap-2">
-                                        {amenities.map((a, i) => (
-                                            <Badge key={`${a}-${i}`} tone="light">
-                                                {a}
-                                            </Badge>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="rounded-2xl bg-white/10 px-4 py-5 text-sm text-white/70">
-                                        Amenities information is not available for this hotel.
-                                    </div>
-                                )}
-                            </GlassSection>
+                                <GlassSection title="Amenities" subtitle="Hotel amenities from main details">
+                                    {amenities.length > 0 ? (
+                                        <div className="flex flex-wrap gap-2">
+                                            {amenities.map((a, i) => (
+                                                <Badge key={`${a}-${i}`} tone="light">
+                                                    {a}
+                                                </Badge>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="rounded-2xl bg-white/10 px-4 py-5 text-sm text-white/70">
+                                            Amenities information is not available for this hotel.
+                                        </div>
+                                    )}
+                                </GlassSection>
 
-                            <GlassSection title="Facilities" subtitle="Extended hotel facilities and services">
-                                {facilities.length > 0 ? (
-                                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                        {facilities.map((f, i) => (
-                                            <div key={`${f?.name || "facility"}-${i}`} className="rounded-2xl bg-white/10 p-4">
-                                                <div className="text-sm font-semibold text-white">
-                                                    {f?.name || "Facility"}
+                                <GlassSection title="Facilities" subtitle="Extended hotel facilities and services">
+                                    {facilities.length > 0 ? (
+                                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                            {facilities.map((f, i) => (
+                                                <div key={`${f?.name || "facility"}-${i}`} className="rounded-2xl bg-white/10 p-4">
+                                                    <div className="text-sm font-semibold text-white">
+                                                        {f?.name || "Facility"}
+                                                    </div>
+                                                    <div className="mt-1 text-xs text-white/60">
+                                                        {f?.category || "General"}
+                                                    </div>
                                                 </div>
-                                                <div className="mt-1 text-xs text-white/60">
-                                                    {f?.category || "General"}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="rounded-2xl bg-white/10 px-4 py-5 text-sm text-white/70">
-                                        Facility information is not available for this hotel.
-                                    </div>
-                                )}
-                            </GlassSection>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="rounded-2xl bg-white/10 px-4 py-5 text-sm text-white/70">
+                                            Facility information is not available for this hotel.
+                                        </div>
+                                    )}
+                                </GlassSection>
 
-                            <GlassSection
-                                title="Selected room"
-                                subtitle="Only the cheapest room matching your budget is shown"
-                            >
-                                {primaryOffer ? (
-                                    <CheapestOfferCard
-                                        offer={primaryOffer}
-                                        bookingFrom={bookingFrom}
-                                        bookingTo={bookingTo}
-                                        nights={nights}
-                                        adults={adults}
-                                        totalText={totalText}
-                                        nightlyText={nightlyText}
-                                        taxText={taxText}
-                                        derivedBoardType={derivedBoardType}
-                                        derivedPaymentPolicy={derivedPaymentPolicy}
-                                        mealplanText={mealplanText}
-                                    />
-                                ) : (
-                                    <div className="rounded-2xl bg-white/10 px-4 py-5 text-sm text-white/70">
-                                        Нема достапна matching room offer за овој хотел.
-                                    </div>
-                                )}
-                            </GlassSection>
-
-                            <GlassSection title="Room information" subtitle="Room details and room photos">
-                                {roomsData.length > 0 ? (
-                                    <div className="space-y-4">
-                                        <RoomCard
-                                            room={roomsData[0]}
+                                <GlassSection
+                                    title="Selected room"
+                                    subtitle="Only the cheapest room matching your budget is shown"
+                                >
+                                    {primaryOffer ? (
+                                        <CheapestOfferCard
+                                            offer={primaryOffer}
+                                            bookingFrom={bookingFrom}
+                                            bookingTo={bookingTo}
+                                            nights={nights}
+                                            adults={adults}
+                                            totalText={totalText}
+                                            nightlyText={nightlyText}
+                                            taxText={taxText}
                                             derivedBoardType={derivedBoardType}
                                             derivedPaymentPolicy={derivedPaymentPolicy}
                                             mealplanText={mealplanText}
                                         />
-                                    </div>
-                                ) : (
-                                    <div className="rounded-2xl bg-white/10 px-4 py-5 text-sm text-white/70">
-                                        Room details are not available for this hotel.
-                                    </div>
-                                )}
-                            </GlassSection>
-                        </div>
-
-                        <aside>
-                            <div className="space-y-6 xl:sticky xl:top-24">
-                                <GlassSection title="Policies" subtitle="Check-in, cancellation and child / pet rules">
-                                    <div className="space-y-3">
-                                        <InfoTile
-                                            label="Check-in"
-                                            value={
-                                                policies
-                                                    ? `${policies.checkInFrom || "—"} → ${policies.checkInUntil || "—"}`
-                                                    : "—"
-                                            }
-                                        />
-                                        <InfoTile
-                                            label="Check-out"
-                                            value={
-                                                policies
-                                                    ? `${policies.checkOutFrom || "—"} → ${policies.checkOutUntil || "—"}`
-                                                    : "—"
-                                            }
-                                        />
-                                        <InfoTile label="Cancellation" value={policies?.cancellationPolicy || primaryBlock?.paymentterms?.cancellation?.description || "—"} />
-                                        <InfoTile label="Children" value={policies?.childPolicy || "—"} />
-                                        <InfoTile label="Pets" value={policies?.petPolicy || "—"} />
-                                    </div>
+                                    ) : (
+                                        <div className="rounded-2xl bg-white/10 px-4 py-5 text-sm text-white/70">
+                                            No matching room offer is available for this hotel.
+                                        </div>
+                                    )}
                                 </GlassSection>
 
-                                <GlassSection title="Payment features" subtitle="Payment and card support">
-                                    <div className="space-y-3">
-                                        <InfoTile label="Policy summary" value={derivedPaymentPolicy} />
-                                        <InfoTile label="Board type" value={derivedBoardType} />
-                                        <InfoTile label="Meal plan" value={mealplanText} />
-                                        <InfoTile
-                                            label="Pay at property"
-                                            value={
-                                                paymentFeatures?.payAtProperty == null
-                                                    ? "—"
-                                                    : paymentFeatures.payAtProperty
-                                                        ? "Yes"
-                                                        : "No"
-                                            }
-                                        />
-                                        <InfoTile
-                                            label="Prepayment required"
-                                            value={
-                                                paymentFeatures?.prepaymentRequired == null
-                                                    ? Number(primaryBlock?.pay_in_advance) === 1 || Number(primaryBlock?.deposit_required) === 1
-                                                        ? "Yes"
-                                                        : "No"
-                                                    : paymentFeatures.prepaymentRequired
-                                                        ? "Yes"
-                                                        : "No"
-                                            }
-                                        />
-                                        <InfoTile
-                                            label="Free cancellation"
-                                            value={
-                                                paymentFeatures?.freeCancellationAvailable == null
-                                                    ? Number(primaryBlock?.refundable) === 1
-                                                        ? "Yes"
-                                                        : "No"
-                                                    : paymentFeatures.freeCancellationAvailable
-                                                        ? "Yes"
-                                                        : "No"
-                                            }
-                                        />
-                                    </div>
-
-                                    {Array.isArray(paymentFeatures?.supportedCards) && paymentFeatures.supportedCards.length > 0 ? (
-                                        <div className="mt-4">
-                                            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
-                                                Supported cards
-                                            </div>
-                                            <div className="flex flex-wrap gap-2">
-                                                {paymentFeatures.supportedCards.map((card, i) => (
-                                                    <Badge key={`${card}-${i}`} tone="light">
-                                                        {card}
-                                                    </Badge>
-                                                ))}
-                                            </div>
+                                <GlassSection title="Room information" subtitle="Room details and room photos">
+                                    {roomsData.length > 0 ? (
+                                        <div className="space-y-4">
+                                            <RoomCard
+                                                room={roomsData[0]}
+                                                derivedBoardType={derivedBoardType}
+                                                derivedPaymentPolicy={derivedPaymentPolicy}
+                                                mealplanText={mealplanText}
+                                            />
                                         </div>
-                                    ) : null}
-
-                                    {Array.isArray(paymentFeatures?.paymentNotes) && paymentFeatures.paymentNotes.length > 0 ? (
-                                        <div className="mt-4 space-y-2">
-                                            {paymentFeatures.paymentNotes.map((note, i) => (
-                                                <div key={`${note}-${i}`} className="rounded-2xl bg-white/10 p-3 text-sm text-white/75">
-                                                    {note}
-                                                </div>
-                                            ))}
+                                    ) : (
+                                        <div className="rounded-2xl bg-white/10 px-4 py-5 text-sm text-white/70">
+                                            Room details are not available for this hotel.
                                         </div>
-                                    ) : primaryBlock?.paymentterms?.prepayment?.description || primaryBlock?.paymentterms?.cancellation?.description ? (
-                                        <div className="mt-4 space-y-2">
-                                            {primaryBlock?.paymentterms?.prepayment?.description ? (
-                                                <div className="rounded-2xl bg-white/10 p-3 text-sm text-white/75">
-                                                    {primaryBlock.paymentterms.prepayment.description}
-                                                </div>
-                                            ) : null}
-                                            {primaryBlock?.paymentterms?.cancellation?.description ? (
-                                                <div className="rounded-2xl bg-white/10 p-3 text-sm text-white/75">
-                                                    {primaryBlock.paymentterms.cancellation.description}
-                                                </div>
-                                            ) : null}
-                                        </div>
-                                    ) : null}
-                                </GlassSection>
-
-                                <GlassSection title="Quick actions" subtitle="Open live hotel searches on external platforms">
-                                    <div className="space-y-3">
-                                        <ActionCard
-                                            title="Booking.com"
-                                            subtitle="Check live availability and rates"
-                                            onClick={() => openExternal(bookingUrl)}
-                                        />
-                                        <ActionCard
-                                            title="Expedia"
-                                            subtitle="Compare availability externally"
-                                            onClick={() => openExternal(expediaUrl)}
-                                        />
-                                        <ActionCard
-                                            title="Hotels.com"
-                                            subtitle="Search this stay on Hotels.com"
-                                            onClick={() => openExternal(hotelsUrl)}
-                                        />
-                                        <ActionCard
-                                            title="Google Maps"
-                                            subtitle="Open exact hotel location"
-                                            onClick={() => openExternal(mapsUrl)}
-                                        />
-                                    </div>
-                                </GlassSection>
-
-                                <GlassSection title="Trip summary" subtitle="Current hotel search configuration">
-                                    <div className="space-y-3">
-                                        <InfoTile label="Destination" value={stateSearch?.destinationName || "—"} />
-                                        <InfoTile
-                                            label="Dates"
-                                            value={`${formatDateDisplay(bookingFrom)} → ${formatDateDisplay(bookingTo)}`}
-                                        />
-                                        <InfoTile label="Guests" value={adults} />
-                                        <InfoTile label="Rooms" value={roomCount} />
-                                        <InfoTile label="Nights" value={nights || "—"} />
-                                        <InfoTile label="Currency" value={displayCurrency} />
-                                    </div>
-
-                                    {primaryOffer ? (
-                                        <div className="mt-4 rounded-2xl border border-emerald-300/20 bg-emerald-500/20 p-4">
-                                            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">
-                                                Current best price
-                                            </div>
-                                            <div className="mt-2 text-2xl font-bold text-white">
-                                                {totalText(primaryOffer)}
-                                            </div>
-                                        </div>
-                                    ) : null}
+                                    )}
                                 </GlassSection>
                             </div>
-                        </aside>
-                    </div>
-                ) : null}
+
+                            <aside>
+                                <div className="space-y-6 xl:sticky xl:top-24">
+                                    <GlassSection title="Policies" subtitle="Check-in, cancellation and child / pet rules">
+                                        <div className="space-y-3">
+                                            <InfoTile
+                                                label="Check-in"
+                                                value={
+                                                    policies
+                                                        ? `${policies.checkInFrom || "—"} → ${policies.checkInUntil || "—"}`
+                                                        : "—"
+                                                }
+                                            />
+                                            <InfoTile
+                                                label="Check-out"
+                                                value={
+                                                    policies
+                                                        ? `${policies.checkOutFrom || "—"} → ${policies.checkOutUntil || "—"}`
+                                                        : "—"
+                                                }
+                                            />
+                                            <InfoTile label="Cancellation" value={policies?.cancellationPolicy || primaryBlock?.paymentterms?.cancellation?.description || "—"} />
+                                            <InfoTile label="Children" value={policies?.childPolicy || "—"} />
+                                            <InfoTile label="Pets" value={policies?.petPolicy || "—"} />
+                                        </div>
+                                    </GlassSection>
+
+                                    <GlassSection title="Payment features" subtitle="Payment and card support">
+                                        <div className="space-y-3">
+                                            {derivedPaymentPolicy ? <InfoTile label="Policy summary" value={derivedPaymentPolicy} /> : null}
+                                            {derivedBoardType ? <InfoTile label="Board type" value={derivedBoardType} /> : null}
+                                            {mealplanText ? <InfoTile label="Meal plan" value={mealplanText} /> : null}
+                                            <InfoTile
+                                                label="Pay at property"
+                                                value={
+                                                    paymentFeatures?.payAtProperty == null
+                                                        ? "—"
+                                                        : paymentFeatures.payAtProperty
+                                                            ? "Yes"
+                                                            : "No"
+                                                }
+                                            />
+                                            <InfoTile
+                                                label="Prepayment required"
+                                                value={
+                                                    paymentFeatures?.prepaymentRequired == null
+                                                        ? Number(primaryBlock?.pay_in_advance) === 1 || Number(primaryBlock?.deposit_required) === 1
+                                                            ? "Yes"
+                                                            : "No"
+                                                        : paymentFeatures.prepaymentRequired
+                                                            ? "Yes"
+                                                            : "No"
+                                                }
+                                            />
+                                            <InfoTile
+                                                label="Free cancellation"
+                                                value={
+                                                    paymentFeatures?.freeCancellationAvailable == null
+                                                        ? Number(primaryBlock?.refundable) === 1
+                                                            ? "Yes"
+                                                            : "No"
+                                                        : paymentFeatures.freeCancellationAvailable
+                                                            ? "Yes"
+                                                            : "No"
+                                                }
+                                            />
+                                        </div>
+
+                                        {Array.isArray(paymentFeatures?.supportedCards) && paymentFeatures.supportedCards.length > 0 ? (
+                                            <div className="mt-4">
+                                                <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
+                                                    Supported cards
+                                                </div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {paymentFeatures.supportedCards.map((card, i) => (
+                                                        <Badge key={`${card}-${i}`} tone="light">
+                                                            {card}
+                                                        </Badge>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ) : null}
+
+                                        {Array.isArray(paymentFeatures?.paymentNotes) && paymentFeatures.paymentNotes.length > 0 ? (
+                                            <div className="mt-4 space-y-2">
+                                                {paymentFeatures.paymentNotes.map((note, i) => (
+                                                    <div key={`${note}-${i}`} className="rounded-2xl bg-white/10 p-3 text-sm text-white/75">
+                                                        {note}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : primaryBlock?.paymentterms?.prepayment?.description || primaryBlock?.paymentterms?.cancellation?.description ? (
+                                            <div className="mt-4 space-y-2">
+                                                {primaryBlock?.paymentterms?.prepayment?.description ? (
+                                                    <div className="rounded-2xl bg-white/10 p-3 text-sm text-white/75">
+                                                        {primaryBlock.paymentterms.prepayment.description}
+                                                    </div>
+                                                ) : null}
+                                                {primaryBlock?.paymentterms?.cancellation?.description ? (
+                                                    <div className="rounded-2xl bg-white/10 p-3 text-sm text-white/75">
+                                                        {primaryBlock.paymentterms.cancellation.description}
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                        ) : null}
+                                    </GlassSection>
+
+                                    <GlassSection title="Quick actions" subtitle="Open live hotel searches on external platforms">
+                                        <div className="space-y-3">
+                                            <ActionCard
+                                                title="Booking.com"
+                                                subtitle="Check live availability and rates"
+                                                onClick={() => openExternal(bookingUrl)}
+                                            />
+                                            <ActionCard
+                                                title="Expedia"
+                                                subtitle="Compare availability externally"
+                                                onClick={() => openExternal(expediaUrl)}
+                                            />
+                                            <ActionCard
+                                                title="Hotels.com"
+                                                subtitle="Search this stay on Hotels.com"
+                                                onClick={() => openExternal(hotelsUrl)}
+                                            />
+                                            <ActionCard
+                                                title="Google Maps"
+                                                subtitle="Open exact hotel location"
+                                                onClick={() => openExternal(mapsUrl)}
+                                            />
+                                        </div>
+                                    </GlassSection>
+
+                                    <GlassSection title="Trip summary" subtitle="Current hotel search configuration">
+                                        <div className="space-y-3">
+                                            <InfoTile label="Destination" value={stateSearch?.destinationName || "—"} />
+                                            <InfoTile
+                                                label="Dates"
+                                                value={`${formatDateDisplay(bookingFrom)} → ${formatDateDisplay(bookingTo)}`}
+                                            />
+                                            <InfoTile label="Guests" value={adults} />
+                                            <InfoTile label="Rooms" value={roomCount} />
+                                            <InfoTile label="Nights" value={nights || "—"} />
+                                            <InfoTile label="Currency" value={displayCurrency} />
+                                        </div>
+
+                                        {primaryOffer ? (
+                                            <div className="mt-4 rounded-2xl border border-emerald-300/20 bg-emerald-500/20 p-4">
+                                                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">
+                                                    Current best price
+                                                </div>
+                                                <div className="mt-2 text-2xl font-bold text-white">
+                                                    {totalText(primaryOffer)}
+                                                </div>
+                                            </div>
+                                        ) : null}
+                                    </GlassSection>
+                                </div>
+                            </aside>
+                        </div>
+                    ) : null}
+                </div>
             </section>
         </div>
     );

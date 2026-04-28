@@ -24,6 +24,7 @@ public record HotelOfferDto(
         String bedType,
 
         String boardType,
+        String paymentPolicy,
         Boolean refundable,
         String cancellationPolicy,
 

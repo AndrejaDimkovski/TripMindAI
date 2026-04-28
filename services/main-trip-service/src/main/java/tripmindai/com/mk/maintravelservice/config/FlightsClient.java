@@ -49,7 +49,7 @@ public class FlightsClient {
 
             return result != null ? result : List.of();
         } catch (Exception e) {
-            return List.of();
+            throw new RuntimeException("Flights destinations request failed", e);
         }
     }
 
@@ -83,7 +83,7 @@ public class FlightsClient {
 
             return result != null ? result : List.of();
         } catch (Exception e) {
-            return List.of();
+            throw new RuntimeException("Flights search request failed", e);
         }
     }
 
@@ -103,7 +103,7 @@ public class FlightsClient {
                     .retrieve()
                     .body(FlightDetailsDto.class);
         } catch (Exception e) {
-            return null;
+            throw new RuntimeException("Flight details request failed", e);
         }
     }
 

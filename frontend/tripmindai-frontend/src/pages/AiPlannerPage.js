@@ -65,6 +65,31 @@ function normalizePromptText(prompt) {
         .trim();
 }
 
+function safePositiveInt(value, fallback = 1) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+}
+
+function clampPeople(value, fallback = 1) {
+    const n = safePositiveInt(value, fallback);
+    return Math.min(Math.max(n, 1), 20);
+}
+
+function normalizeInterpretation(interpretation, fallbackPeople = 1) {
+    if (!interpretation) return null;
+
+    const budget = String(interpretation.budgetLevel || "").toLowerCase();
+
+    return {
+        ...interpretation,
+        extractedPeople: clampPeople(interpretation.extractedPeople, fallbackPeople),
+        extractedDurationDays: interpretation.extractedDurationDays
+            ? safePositiveInt(interpretation.extractedDurationDays, 0)
+            : null,
+        budgetLevel: ["low", "medium", "high"].includes(budget) ? budget : "medium",
+    };
+}
+
 function mapAiBudgetToPriceRange(budgetLevel) {
     const value = String(budgetLevel || "").trim().toLowerCase();
 
@@ -148,6 +173,25 @@ function normalizeDestination(destination) {
     };
 }
 
+function originDisplayValue(value) {
+    const raw = String(value || "").trim().toUpperCase();
+
+    if (!raw) return "Skopje";
+    if (raw === "SKP") return "Skopje";
+
+    return value;
+}
+
+function resolveOriginToIata(value) {
+    const raw = String(value || "").trim().toUpperCase();
+
+    if (!raw) return "SKP";
+    if (raw === "SKP") return "SKP";
+    if (raw === "SKOPJE") return "SKP";
+
+    return raw;
+}
+
 function GlassCard({ children, className = "" }) {
     return (
         <div className={`rounded-[30px] border border-white/10 bg-white/78 shadow-xl backdrop-blur ${className}`}>
@@ -204,6 +248,8 @@ export default function AiPlannerPage() {
     const [countries, setCountries] = useState([]);
     const [loadingCountries, setLoadingCountries] = useState(true);
 
+    const [tripMode, setTripMode] = useState("FLIGHT_HOTEL");
+
     const [aiLoading, setAiLoading] = useState(false);
     const [aiPreviewLoading, setAiPreviewLoading] = useState(false);
     const [error, setError] = useState("");
@@ -224,7 +270,7 @@ export default function AiPlannerPage() {
     });
 
     const [searchForm, setSearchForm] = useState({
-        origin: "Skp",
+        origin: "Skopje",
         from: "",
         to: "",
         adults: 2,
@@ -259,12 +305,20 @@ export default function AiPlannerPage() {
         try {
             const flow = readFlowState();
 
+            if (flow?.tripMode) {
+                setTripMode(flow.tripMode);
+            }
+
             if (flow?.aiForm) {
                 setAiForm((prev) => ({ ...prev, ...flow.aiForm }));
             }
 
             if (flow?.searchForm) {
-                setSearchForm((prev) => ({ ...prev, ...flow.searchForm }));
+                setSearchForm((prev) => ({
+                    ...prev,
+                    ...flow.searchForm,
+                    origin: originDisplayValue(flow.searchForm.origin),
+                }));
             }
 
             if (flow?.destination) {
@@ -296,7 +350,7 @@ export default function AiPlannerPage() {
     }, [aiPreview, aiForm.budgetLevel]);
 
     const detectedPeople = useMemo(() => {
-        return aiPreview?.extractedPeople || aiForm.people || 1;
+        return clampPeople(aiPreview?.extractedPeople || aiForm.people || 1, 1);
     }, [aiPreview, aiForm.people]);
 
     const detectedDatesText = useMemo(() => {
@@ -307,9 +361,7 @@ export default function AiPlannerPage() {
         }
 
         if (aiPreview?.extractedMonth) {
-            const duration = aiPreview?.extractedDurationDays
-                ? ` · ${aiPreview.extractedDurationDays} days`
-                : "";
+            const duration = aiPreview?.extractedDurationDays ? ` · ${aiPreview.extractedDurationDays} days` : "";
             return `${aiPreview.extractedMonth}${duration}`;
         }
 
@@ -325,10 +377,7 @@ export default function AiPlannerPage() {
     }, [aiForm.prompt, aiPreviewLoading, aiPreview]);
 
     const budgetPreview = useMemo(() => {
-        return getBudgetPresentation(
-            detectedBudget || aiForm.budgetLevel,
-            searchForm?.targetCurrency || "EUR"
-        );
+        return getBudgetPresentation(detectedBudget || aiForm.budgetLevel, searchForm?.targetCurrency || "EUR");
     }, [detectedBudget, aiForm.budgetLevel, searchForm?.targetCurrency]);
 
     const previewPriceRange = useMemo(() => {
@@ -337,6 +386,21 @@ export default function AiPlannerPage() {
 
     const selectedDestinationName = selectedDestination?.name || aiPreview?.extractedDestinationText || "Not selected yet";
     const selectedCountryLabel = activeCountryName || selectedDestination?.countryCode || "Country not detected yet";
+
+    function handleTripModeChange(nextMode) {
+        setTripMode(nextMode);
+        const current = readFlowState() || {};
+        saveFlowState({
+            ...current,
+            mode: "ai",
+            tripMode: nextMode,
+            aiForm,
+            searchForm,
+            destination: selectedDestination,
+            activeCountryName,
+            aiSuggestedCodes,
+        });
+    }
 
     function clearAiPreview() {
         setAiPreview(null);
@@ -380,7 +444,12 @@ export default function AiPlannerPage() {
                 });
 
                 if (previewRequestIdRef.current === requestId) {
-                    setAiPreview(res?.interpretation || null);
+                    setAiPreview(
+                        normalizeInterpretation(
+                            res?.interpretation || null,
+                            safePositiveInt(aiForm.people || 1, 1)
+                        )
+                    );
                 }
             } catch (e) {
                 console.error("AI preview error:", e);
@@ -406,6 +475,7 @@ export default function AiPlannerPage() {
 
             saveFlowState({
                 mode: "ai",
+                tripMode,
                 activeCountryName: "",
                 country: null,
                 destination: null,
@@ -447,7 +517,7 @@ export default function AiPlannerPage() {
         const normalizedTo = normalizeDateToIso(nextSearchForm.to);
 
         const data = await searchTrip({
-            origin: String(nextSearchForm.origin || "SKP").trim(),
+            origin: resolveOriginToIata(nextSearchForm.origin),
             destination: cityCode,
             cityCode,
             from: normalizedFrom,
@@ -465,6 +535,7 @@ export default function AiPlannerPage() {
         });
 
         saveFlowState({
+            tripMode,
             mode: "ai",
             activeCountryName: countryObj?.name || "",
             country: countryObj
@@ -480,6 +551,7 @@ export default function AiPlannerPage() {
             aiSuggestedCodes: nextCodes,
             searchForm: {
                 ...nextSearchForm,
+                origin: originDisplayValue(resolveOriginToIata(nextSearchForm.origin)),
                 from: normalizedFrom,
                 to: normalizedTo,
             },
@@ -488,7 +560,7 @@ export default function AiPlannerPage() {
             selectedHotelIndex: null,
         });
 
-        navigate("/plan/flights");
+        navigate(tripMode === "HOTEL_ONLY" ? "/plan/hotels" : "/plan/flights");
     }
 
     async function handleAiSearch() {
@@ -515,7 +587,11 @@ export default function AiPlannerPage() {
                 toDate: aiForm.toDate || null,
             });
 
-            const interpretation = res?.interpretation || null;
+            const interpretation = normalizeInterpretation(
+                res?.interpretation || null,
+                safePositiveInt(aiForm.people || searchForm.adults || 1, 1)
+            );
+
             const recommendations = Array.isArray(res?.recommendations) ? res.recommendations : [];
 
             if (!recommendations.length) {
@@ -538,35 +614,29 @@ export default function AiPlannerPage() {
                 : [];
 
             const bestMatch =
+                recommendations.find((r) => interpretedCodes[0] === String(r?.cityCode || "").toUpperCase()) ||
+                recommendations.find((r) => interpretedCodes.includes(String(r?.cityCode || "").toUpperCase())) ||
                 recommendations.find(
-                    (r) => interpretedCodes[0] === String(r?.cityCode || "").toUpperCase()
-                ) ||
-                recommendations.find((r) =>
-                    interpretedCodes.includes(String(r?.cityCode || "").toUpperCase())
-                ) ||
-                recommendations.find(
-                    (r) =>
-                        extractedDestinationText &&
-                        normalizePromptText(r?.name) === extractedDestinationText
+                    (r) => extractedDestinationText && normalizePromptText(r?.name) === extractedDestinationText
                 ) ||
                 recommendations.find(
-                    (r) =>
-                        extractedDestinationText &&
-                        normalizePromptText(r?.name).includes(extractedDestinationText)
+                    (r) => extractedDestinationText && normalizePromptText(r?.name).includes(extractedDestinationText)
                 ) ||
-                recommendations.find((r) =>
-                    promptLower.includes(normalizePromptText(r?.name))
-                ) ||
+                recommendations.find((r) => promptLower.includes(normalizePromptText(r?.name))) ||
                 recommendations[0];
 
             if (!bestMatch?.cityCode) {
                 throw new Error("AI не врати валиден city code за дестинација.");
             }
 
-            const nextAdults =
+            const nextAdults = clampPeople(
                 interpretation?.extractedPeople ||
                 aiPreview?.extractedPeople ||
-                Math.max(1, Number(searchForm.adults || 1));
+                searchForm.adults ||
+                aiForm.people ||
+                1,
+                1
+            );
 
             const nextFrom =
                 interpretation?.extractedFromDate ||
@@ -598,6 +668,7 @@ export default function AiPlannerPage() {
 
             const nextSearchForm = {
                 ...searchForm,
+                origin: originDisplayValue(resolveOriginToIata(searchForm.origin)),
                 from: nextFrom,
                 to: nextTo,
                 adults: nextAdults,
@@ -609,11 +680,7 @@ export default function AiPlannerPage() {
             };
 
             const matchedCountry =
-                countries.find(
-                    (c) =>
-                        c.code === bestMatch.countryCode ||
-                        c.name === bestMatch.countryName
-                ) || null;
+                countries.find((c) => c.code === bestMatch.countryCode || c.name === bestMatch.countryName) || null;
 
             const selected = normalizeDestination(bestMatch);
 
@@ -671,19 +738,47 @@ export default function AiPlannerPage() {
                             </h1>
 
                             <p className="mt-5 max-w-xl text-sm leading-7 text-white/85 md:text-base">
-                                Describe your ideal journey and let TravelMindAI detect destination,
-                                travel dates, people and budget, then continue directly to flights.
+                                Describe your ideal journey and let TravelMindAI detect destination, travel dates,
+                                people and budget, then continue directly to{" "}
+                                {tripMode === "HOTEL_ONLY" ? "hotels" : "flights"}.
                             </p>
+
+                            <div className="mt-5 flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => handleTripModeChange("FLIGHT_HOTEL")}
+                                    className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
+                                        tripMode === "FLIGHT_HOTEL"
+                                            ? "bg-emerald-500 text-white"
+                                            : "bg-white/10 text-white"
+                                    }`}
+                                >
+                                    Flight + Hotel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleTripModeChange("HOTEL_ONLY")}
+                                    className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
+                                        tripMode === "HOTEL_ONLY"
+                                            ? "bg-emerald-500 text-white"
+                                            : "bg-white/10 text-white"
+                                    }`}
+                                >
+                                    Hotel only
+                                </button>
+                            </div>
 
                             <div className="mt-5 flex flex-wrap gap-2">
                                 <Badge tone="white">{selectedDestinationName}</Badge>
                                 <Badge tone="blue">{selectedCountryLabel}</Badge>
-                                <Badge tone="green">{detectedPeople} traveler{Number(detectedPeople) > 1 ? "s" : ""}</Badge>
+                                <Badge tone="green">
+                                    {detectedPeople} traveler{Number(detectedPeople) > 1 ? "s" : ""}
+                                </Badge>
                             </div>
 
                             <div className="mt-8 flex flex-wrap gap-4">
                                 <HeroButton primary onClick={handleAiSearch} disabled={aiLoading}>
-                                    {aiLoading ? "Thinking..." : "Suggest and search"}
+                                    {aiLoading ? "Thinking..." : tripMode === "HOTEL_ONLY" ? "Suggest and search hotels" : "Suggest and search"}
                                 </HeroButton>
 
                                 <HeroButton onClick={() => navigate("/plan/manual")}>
@@ -749,6 +844,15 @@ export default function AiPlannerPage() {
                                 <div className="space-y-3">
                                     <div className="rounded-2xl bg-white/10 p-4">
                                         <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/65">
+                                            Trip mode
+                                        </div>
+                                        <div className="mt-2 text-sm font-semibold text-white">
+                                            {tripMode === "HOTEL_ONLY" ? "Hotel only" : "Flight + Hotel"}
+                                        </div>
+                                    </div>
+
+                                    <div className="rounded-2xl bg-white/10 p-4">
+                                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/65">
                                             Detected dates
                                         </div>
                                         <div className="mt-2 text-sm font-semibold text-white">
@@ -801,10 +905,7 @@ export default function AiPlannerPage() {
                                             Search price filter
                                         </div>
                                         <div className="mt-2 text-sm font-semibold text-white">
-                                            {getBudgetPriceRangeText(
-                                                previewPriceRange,
-                                                searchForm?.targetCurrency || "EUR"
-                                            )}
+                                            {getBudgetPriceRangeText(previewPriceRange, searchForm?.targetCurrency || "EUR")}
                                         </div>
                                     </div>
 

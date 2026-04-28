@@ -1,4 +1,4 @@
-package tripmindai.com.mk.maintravelservice.service;
+package tripmindai.com.mk.maintravelservice.service.trip;
 
 import org.springframework.stereotype.Service;
 import tripmindai.com.mk.maintravelservice.model.Country;

@@ -144,6 +144,7 @@ function Badge({ children, tone = "light" }) {
         blue: "bg-blue-100 text-blue-700",
         yellow: "bg-amber-100 text-amber-700",
         dark: "bg-slate-900 text-white",
+        white: "bg-white/90 text-slate-900",
     };
 
     return (
@@ -210,6 +211,11 @@ export default function FlightResultsPage() {
     const countryName = flow?.country?.name || "";
     const searchForm = flow?.searchForm || {};
     const currency = searchForm?.targetCurrency || "EUR";
+
+    const flightsServiceAvailable = flow?.searchResult?.flightsServiceAvailable !== false;
+    const flightsMessage =
+        flow?.searchResult?.flightsMessage ||
+        "Flight service is temporarily unavailable. Please try again later.";
 
     function persistSelectedFlight(index) {
         const current = readFlowState() || {};
@@ -313,7 +319,8 @@ export default function FlightResultsPage() {
                                 </div>
 
                                 <div className="mt-4 rounded-2xl bg-white/10 p-4">
-                                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/65">
+                                    <div
+                                        className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/65">
                                         Travel dates
                                     </div>
                                     <div className="mt-2 text-sm font-semibold text-white">
@@ -321,6 +328,18 @@ export default function FlightResultsPage() {
                                         {searchForm?.to ? ` → ${formatDateDisplay(searchForm.to)}` : ""}
                                     </div>
                                 </div>
+
+                                <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-500/15 p-4">
+                                    <div
+                                        className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-100">
+                                        Price notice
+                                    </div>
+                                    <div className="mt-2 text-sm leading-6 text-white/80">
+                                        Displayed prices are indicative and may differ from the final airline offer at
+                                        booking time.
+                                    </div>
+                                </div>
+
                             </GlassPanel>
                         </div>
                     </div>
@@ -328,9 +347,13 @@ export default function FlightResultsPage() {
                     {flights.length === 0 ? (
                         <div className="mt-10">
                             <GlassPanel className="p-6 text-white lg:p-8">
-                                <h2 className="text-2xl font-bold text-white">No flights found</h2>
+                                <h2 className="text-2xl font-bold text-white">
+                                {flightsServiceAvailable ? "No flights found" : "Flight service unavailable"}
+                                </h2>
                                 <p className="mt-2 text-sm text-white/70">
-                                    No real flights were returned for this search. Try another destination, dates, or passenger count.
+                                    {flightsServiceAvailable
+                                        ? "No real flights were returned for this search. Try another destination, dates, or passenger count."
+                                        : flightsMessage}
                                 </p>
 
                                 <div className="mt-5">

@@ -1,4 +1,4 @@
-package tripmindai.com.mk.maintravelservice.service;
+package tripmindai.com.mk.maintravelservice.service.email;
 
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;

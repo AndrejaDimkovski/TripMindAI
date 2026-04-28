@@ -1,4 +1,4 @@
-package tripmindai.com.mk.maintravelservice.web;
+package tripmindai.com.mk.maintravelservice.web.geo;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RestController;
 import tripmindai.com.mk.maintravelservice.dto.country.CountryDto;
 import tripmindai.com.mk.maintravelservice.dto.country.CountryWithDestinationsDto;
 import tripmindai.com.mk.maintravelservice.dto.country.DestinationDto;
-import tripmindai.com.mk.maintravelservice.service.GeoService;
+import tripmindai.com.mk.maintravelservice.service.geo.GeoService;
 
 import java.util.List;
 

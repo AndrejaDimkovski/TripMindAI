@@ -39,15 +39,16 @@ export async function apiFetch(path, options = {}) {
     const payload = await parseResponsePayload(response);
 
     if (!response.ok) {
-        if (response.status === 401) {
+        if (response.status === 401 && !path.startsWith("/api/auth/login")) {
             clearToken();
         }
 
         const message =
             (typeof payload === "string" && payload) ||
             payload?.message ||
+            payload?.detail ||
             payload?.error ||
-            `HTTP ${response.status}`;
+            "Request not succesful.";
 
         const error = new Error(message);
         error.status = response.status;

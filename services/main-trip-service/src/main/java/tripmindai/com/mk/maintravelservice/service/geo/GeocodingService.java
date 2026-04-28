@@ -1,4 +1,4 @@
-package tripmindai.com.mk.maintravelservice.service;
+package tripmindai.com.mk.maintravelservice.service.geo;
 
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;

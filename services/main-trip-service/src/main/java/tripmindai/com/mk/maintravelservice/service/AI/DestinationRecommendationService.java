@@ -2,7 +2,7 @@ package tripmindai.com.mk.maintravelservice.service.AI;
 
 import org.springframework.stereotype.Service;
 import tripmindai.com.mk.maintravelservice.dto.AI.AiTripInterpretation;
-import tripmindai.com.mk.maintravelservice.dto.RecommendedDestinationDto;
+import tripmindai.com.mk.maintravelservice.dto.AI.RecommendedDestinationDto;
 import tripmindai.com.mk.maintravelservice.model.Destination;
 import tripmindai.com.mk.maintravelservice.repository.DestinationRepository;
 

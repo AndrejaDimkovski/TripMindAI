@@ -1,4 +1,4 @@
-package tripmindai.com.mk.maintravelservice.web;
+package tripmindai.com.mk.maintravelservice.web.ai;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
