@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiGet } from "../api";
 import { API_BASE } from "../api/http";
@@ -128,11 +128,7 @@ export default function DiscoverPage() {
     const [activeCountryIndex, setActiveCountryIndex] = useState(0);
     const [activeDestinationIndex, setActiveDestinationIndex] = useState(0);
 
-    useEffect(() => {
-        loadCountries();
-    }, []);
-
-    async function loadCountries() {
+    const loadCountries = useCallback(async () => {
         setLoading(true);
         setError("");
 
@@ -204,7 +200,11 @@ export default function DiscoverPage() {
         } finally {
             setLoading(false);
         }
-    }
+    }, []);
+
+    useEffect(() => {
+        loadCountries();
+    }, [loadCountries]);
 
     const safeCountryIndex = useMemo(() => {
         if (!countries.length) return 0;
@@ -214,7 +214,6 @@ export default function DiscoverPage() {
     }, [countries, activeCountryIndex]);
 
     const activeCountry = useMemo(() => countries[safeCountryIndex] || null, [countries, safeCountryIndex]);
-
     const destinations = useMemo(() => activeCountry?.destinations || [], [activeCountry]);
 
     const safeDestinationIndex = useMemo(() => {
@@ -236,7 +235,7 @@ export default function DiscoverPage() {
     }, [featuredDestination, activeCountry]);
 
     const heroTitle = useMemo(() => {
-        return featuredDestination?.name || activeCountry?.name || "Explore";
+        return featuredDestination?.name || activeCountry?.name || "Explore with AI";
     }, [featuredDestination, activeCountry]);
 
     const heroSubtitle = useMemo(() => {

@@ -1,0 +1,107 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: tripmindai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5433:5432"
+    volumes:
+      - tripmindai_postgres_data:/var/lib/postgresql/data
+    networks:
+      - tripmindai-network
+
+  main-trip-service:
+    build:
+      context: ./services/main-trip-service
+    container_name: tripmindai-main-trip-service
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - flights-service
+      - hotels-service
+    environment:
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO}
+      SPRING_JPA_SHOW_SQL: ${SPRING_JPA_SHOW_SQL}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION}
+      APP_JWT_SECRET: ${APP_JWT_SECRET}
+      APP_JWT_EXPIRATION_MS: ${APP_JWT_EXPIRATION_MS}
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST}
+      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT}
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD}
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH}
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE}
+      SERVICES_FLIGHTS_BASE_URL: ${SERVICES_FLIGHTS_BASE_URL}
+      SERVICES_HOTELS_BASE_URL: ${SERVICES_HOTELS_BASE_URL}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL}
+    ports:
+      - "8080:8080"
+    networks:
+      - tripmindai-network
+
+  flights-service:
+    build:
+      context: ./services/flights-service
+    container_name: tripmindai-flights-service
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      BOOKING_API_BASE_URL: ${BOOKING_API_BASE_URL}
+      BOOKING_API_HOST: ${BOOKING_API_HOST}
+      BOOKING_API_KEY: ${BOOKING_API_KEY}
+      BOOKING_API_DEFAULT_CURRENCY: ${BOOKING_API_DEFAULT_CURRENCY}
+    ports:
+      - "8081:8081"
+    networks:
+      - tripmindai-network
+
+  hotels-service:
+    build:
+      context: ./services/hotels-service
+    container_name: tripmindai-hotels-service
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      BOOKING_API_BASE_URL: ${BOOKING_API_BASE_URL}
+      BOOKING_API_HOST: ${BOOKING_API_HOST}
+      BOOKING_API_KEY: ${BOOKING_API_KEY}
+      BOOKING_API_DEFAULT_CURRENCY: ${BOOKING_API_DEFAULT_CURRENCY}
+    ports:
+      - "8082:8082"
+    networks:
+      - tripmindai-network
+
+  frontend:
+    build:
+      context: ./frontend/tripmindai-frontend
+    container_name: tripmindai-frontend
+    restart: unless-stopped
+    depends_on:
+      - main-trip-service
+    environment:
+      REACT_APP_API_BASE: ${REACT_APP_API_BASE}
+    ports:
+      - "3000:3000"
+    networks:
+      - tripmindai-network
+
+volumes:
+  tripmindai_postgres_data:
+
+networks:
+  tripmindai-network:
+    driver: bridge

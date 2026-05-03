@@ -20,6 +20,8 @@ import ProtectedAdminRoute from "./auth/ProtectedAdminRoute";
 import { AuthProvider } from "./auth/AuthContext";
 import MyPlansPage from "./pages/MyPlansPage";
 import ProfilePage from "./pages/ProfilePage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 
 function App() {
     return (
@@ -139,6 +141,14 @@ function App() {
                                 <FlightDetailsPage />
                             </ProtectedRoute>
                         }
+                    />
+                    <Route
+                        path="/forgot-password"
+                        element={<ForgotPasswordPage />}
+                    />
+                    <Route
+                        path="/reset-password"
+                        element={<ResetPasswordPage />}
                     />
 
                     <Route

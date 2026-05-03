@@ -300,11 +300,18 @@ export default function BookingSummaryPage() {
 
     const hotelOnly = isHotelOnly(flow);
     const searchResult = flow?.searchResult || null;
-    const search = flow?.searchForm || {};
-    const geo = {
-        country: flow?.country?.name || "",
-        destination: flow?.destination || null,
-    };
+
+    const search = useMemo(() => {
+        return flow?.searchForm || {};
+    }, [flow]);
+
+    const geo = useMemo(() => {
+        return {
+            country: flow?.country?.name || "",
+            destination: flow?.destination || null,
+        };
+    }, [flow]);
+
 
     const flights = useMemo(() => searchResult?.flights ?? [], [searchResult]);
     const hotels = useMemo(() => searchResult?.hotels ?? [], [searchResult]);

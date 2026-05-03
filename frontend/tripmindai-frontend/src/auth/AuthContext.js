@@ -40,7 +40,7 @@ export function AuthProvider({ children }) {
     function loginWithToken(token, userPayload = null) {
         storeAuthToken(token);
 
-        if (userPayload) {
+        if (userPayload && userPayload.email) {
             setUser(mapUser(userPayload));
             return;
         }

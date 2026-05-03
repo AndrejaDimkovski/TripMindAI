@@ -391,25 +391,6 @@ export default function ManualPlannerPage() {
         return resolveOriginToIata(searchForm.origin);
     }, [searchForm.origin]);
 
-    function saveDraft(nextSearchForm, nextTripMode = tripMode, nextDestination = selectedDestination, nextCountry = activeCountry) {
-        const current = readFlowState() || {};
-        saveFlowState({
-            ...current,
-            tripMode: nextTripMode,
-            mode: "manual",
-            activeCountryName,
-            country: nextCountry
-                ? {
-                    id: nextCountry.id ?? null,
-                    code: nextCountry.code || "",
-                    name: nextCountry.name || "",
-                    imageUrl: nextCountry.imageUrl || null,
-                }
-                : null,
-            destination: nextDestination ? normalizeDestination(nextDestination) : null,
-            searchForm: nextSearchForm,
-        });
-    }
 
     function handleTripModeChange(nextMode) {
         setTripMode(nextMode);

@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { apiGet } from "../api";
 import { recommendTripAi } from "../api/aiApi";
 import { searchTrip } from "../api/tripsApi";
+import AiPromptComposer from "../components/AiPromptComposer";
+import AiPreviewCard from "../components/AiPreviewCard";
 
 const FLOW_STORAGE_KEY = "tm_flow_v1";
 
@@ -58,13 +60,6 @@ function isValidIsoDate(value) {
     return !Number.isNaN(d.getTime());
 }
 
-function normalizePromptText(prompt) {
-    return String(prompt || "")
-        .toLowerCase()
-        .replace(/\s+/g, " ")
-        .trim();
-}
-
 function safePositiveInt(value, fallback = 1) {
     const n = Number(value);
     return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
@@ -79,14 +74,32 @@ function normalizeInterpretation(interpretation, fallbackPeople = 1) {
     if (!interpretation) return null;
 
     const budget = String(interpretation.budgetLevel || "").toLowerCase();
+    const rawPeople = interpretation.extractedPeople;
+    const rawDuration = interpretation.extractedDurationDays;
+    const notes = String(interpretation.notes || "");
 
     return {
         ...interpretation,
-        extractedPeople: clampPeople(interpretation.extractedPeople, fallbackPeople),
-        extractedDurationDays: interpretation.extractedDurationDays
-            ? safePositiveInt(interpretation.extractedDurationDays, 0)
-            : null,
+        destinationCodes: Array.isArray(interpretation.destinationCodes) ? interpretation.destinationCodes : [],
+        candidateDestinations: Array.isArray(interpretation.candidateDestinations) ? interpretation.candidateDestinations : [],
+        candidateCountries: Array.isArray(interpretation.candidateCountries) ? interpretation.candidateCountries : [],
+        extractedPeople:
+            rawPeople == null || rawPeople === ""
+                ? null
+                : clampPeople(rawPeople, fallbackPeople),
+        extractedDurationDays:
+            rawDuration == null || rawDuration === ""
+                ? null
+                : safePositiveInt(rawDuration, 0),
         budgetLevel: ["low", "medium", "high"].includes(budget) ? budget : "medium",
+        confidence: typeof interpretation.confidence === "number" ? interpretation.confidence : 0,
+        usedAi: Boolean(interpretation.usedAi),
+        needsClarification: Boolean(interpretation.needsClarification),
+        dateFlexibilityHint: interpretation.dateFlexibilityHint || "",
+        extractedOriginCity: interpretation.extractedOriginCity || "",
+        extractedOriginIata: interpretation.extractedOriginIata || "",
+        notes,
+        isUnsupportedDestination: notes.toLowerCase().includes("do not support"),
     };
 }
 
@@ -144,15 +157,15 @@ function validateDates(from, to) {
     const toIso = normalizeDateToIso(to);
 
     if (from && (!fromIso || !isValidIsoDate(fromIso))) {
-        return "From датум мора да биде валиден.";
+        return "From date must be valid.";
     }
 
     if (to && (!toIso || !isValidIsoDate(toIso))) {
-        return "To датум мора да биде валиден.";
+        return "To date must be valid.";
     }
 
     if (fromIso && toIso && toIso < fromIso) {
-        return "To датум не смее да биде пред From.";
+        return "To date cannot be before From date.";
     }
 
     return "";
@@ -164,6 +177,7 @@ function normalizeDestination(destination) {
     return {
         id: destination.id ?? null,
         countryCode: destination.countryCode || "",
+        countryName: destination.countryName || "",
         cityCode: destination.cityCode || "",
         name: destination.name || "",
         latitude: destination.latitude ?? null,
@@ -215,6 +229,7 @@ function Badge({ children, tone = "light" }) {
         blue: "bg-blue-100 text-blue-700",
         yellow: "bg-amber-100 text-amber-700",
         white: "bg-white/90 text-slate-900",
+        red: "bg-rose-100 text-rose-700",
     };
 
     return (
@@ -241,9 +256,7 @@ function HeroButton({ children, primary = false, className = "", ...props }) {
 
 export default function AiPlannerPage() {
     const navigate = useNavigate();
-    const promptRef = useRef(null);
-    const previewTimeoutRef = useRef(null);
-    const previewRequestIdRef = useRef(0);
+    const previewTimerRef = useRef(null);
 
     const [countries, setCountries] = useState([]);
     const [loadingCountries, setLoadingCountries] = useState(true);
@@ -259,12 +272,14 @@ export default function AiPlannerPage() {
     const [selectedDestination, setSelectedDestination] = useState(null);
     const [aiSuggestedCodes, setAiSuggestedCodes] = useState([]);
     const [aiPreview, setAiPreview] = useState(null);
+    const [aiOptions, setAiOptions] = useState([]);
+    const [pendingSelection, setPendingSelection] = useState(null);
 
     const [aiForm, setAiForm] = useState({
         prompt: "",
         budgetLevel: "medium",
-        people: 2,
-        originCity: "Skopje",
+        people: 1,
+        originCity: "",
         fromDate: "",
         toDate: "",
     });
@@ -273,7 +288,7 @@ export default function AiPlannerPage() {
         origin: "Skopje",
         from: "",
         to: "",
-        adults: 2,
+        adults: 1,
         targetCurrency: "EUR",
         countryOfResidence: "MK",
         roomQuantity: 1,
@@ -286,14 +301,12 @@ export default function AiPlannerPage() {
 
     useEffect(() => {
         loadInitial();
-        const focusTimer = setTimeout(() => promptRef.current?.focus?.(), 0);
-        return () => clearTimeout(focusTimer);
     }, []);
 
     useEffect(() => {
         return () => {
-            if (previewTimeoutRef.current) {
-                clearTimeout(previewTimeoutRef.current);
+            if (previewTimerRef.current) {
+                clearTimeout(previewTimerRef.current);
             }
         };
     }, []);
@@ -350,8 +363,8 @@ export default function AiPlannerPage() {
     }, [aiPreview, aiForm.budgetLevel]);
 
     const detectedPeople = useMemo(() => {
-        return clampPeople(aiPreview?.extractedPeople || aiForm.people || 1, 1);
-    }, [aiPreview, aiForm.people]);
+        return aiPreview?.extractedPeople ?? null;
+    }, [aiPreview]);
 
     const detectedDatesText = useMemo(() => {
         if (aiPreview?.extractedFromDate || aiPreview?.extractedToDate) {
@@ -363,6 +376,10 @@ export default function AiPlannerPage() {
         if (aiPreview?.extractedMonth) {
             const duration = aiPreview?.extractedDurationDays ? ` · ${aiPreview.extractedDurationDays} days` : "";
             return `${aiPreview.extractedMonth}${duration}`;
+        }
+
+        if (aiPreview?.extractedDurationDays) {
+            return `${aiPreview.extractedDurationDays} days`;
         }
 
         return "Will be detected from text";
@@ -384,8 +401,18 @@ export default function AiPlannerPage() {
         return mapAiBudgetToPriceRange(detectedBudget || aiForm.budgetLevel);
     }, [detectedBudget, aiForm.budgetLevel]);
 
-    const selectedDestinationName = selectedDestination?.name || aiPreview?.extractedDestinationText || "Not selected yet";
-    const selectedCountryLabel = activeCountryName || selectedDestination?.countryCode || "Country not detected yet";
+    const selectedDestinationName =
+        selectedDestination?.name ||
+        aiPreview?.extractedDestinationText ||
+        aiPreview?.candidateDestinations?.[0] ||
+        "Not selected yet";
+
+    const selectedCountryLabel =
+        activeCountryName ||
+        selectedDestination?.countryName ||
+        aiPreview?.extractedCountry ||
+        aiPreview?.candidateCountries?.[0] ||
+        "Country not detected yet";
 
     function handleTripModeChange(nextMode) {
         setTripMode(nextMode);
@@ -407,19 +434,19 @@ export default function AiPlannerPage() {
         setSelectedDestination(null);
         setActiveCountryName("");
         setAiSuggestedCodes([]);
+        setAiOptions([]);
+        setPendingSelection(null);
     }
 
     function clearPreviewState() {
         setSelectedDestination(null);
         setActiveCountryName("");
         setAiSuggestedCodes([]);
+        setAiOptions([]);
+        setPendingSelection(null);
     }
 
     function triggerAiPreview(promptValue) {
-        if (previewTimeoutRef.current) {
-            clearTimeout(previewTimeoutRef.current);
-        }
-
         const trimmed = String(promptValue || "").trim();
 
         if (trimmed.length < 6) {
@@ -428,38 +455,29 @@ export default function AiPlannerPage() {
             return;
         }
 
-        const requestId = ++previewRequestIdRef.current;
+        if (previewTimerRef.current) {
+            clearTimeout(previewTimerRef.current);
+        }
 
-        previewTimeoutRef.current = setTimeout(async () => {
+        previewTimerRef.current = setTimeout(async () => {
             try {
                 setAiPreviewLoading(true);
 
                 const res = await recommendTripAi({
                     prompt: trimmed,
-                    budgetLevel: "medium",
-                    people: 2,
-                    originCity: aiForm.originCity || "Skopje",
+                    budgetLevel: aiForm.budgetLevel,
+                    people: null,
+                    originCity: null,
                     fromDate: null,
                     toDate: null,
                 });
 
-                if (previewRequestIdRef.current === requestId) {
-                    setAiPreview(
-                        normalizeInterpretation(
-                            res?.interpretation || null,
-                            safePositiveInt(aiForm.people || 1, 1)
-                        )
-                    );
-                }
+                setAiPreview(normalizeInterpretation(res?.interpretation || null, 1));
             } catch (e) {
                 console.error("AI preview error:", e);
-                if (previewRequestIdRef.current === requestId) {
-                    setAiPreview(null);
-                }
+                setAiPreview(null);
             } finally {
-                if (previewRequestIdRef.current === requestId) {
-                    setAiPreviewLoading(false);
-                }
+                setAiPreviewLoading(false);
             }
         }, 600);
     }
@@ -471,6 +489,7 @@ export default function AiPlannerPage() {
                 prompt: value,
                 fromDate: "",
                 toDate: "",
+                originCity: "",
             };
 
             saveFlowState({
@@ -505,7 +524,7 @@ export default function AiPlannerPage() {
         const cityCode = String(safeDestination?.cityCode || "").trim();
 
         if (!cityCode) {
-            throw new Error("AI не врати валидна дестинација.");
+            throw new Error("AI did not return a valid destination.");
         }
 
         const dateMessage = validateDates(nextSearchForm.from, nextSearchForm.to);
@@ -563,6 +582,87 @@ export default function AiPlannerPage() {
         navigate(tripMode === "HOTEL_ONLY" ? "/plan/hotels" : "/plan/flights");
     }
 
+    async function handleDestinationOptionSelect(option, interpretation, recommendations) {
+        const nextAdults = clampPeople(
+            interpretation?.extractedPeople || searchForm.adults || aiForm.people || 1,
+            1
+        );
+
+        const nextFrom =
+            interpretation?.extractedFromDate ||
+            aiPreview?.extractedFromDate ||
+            aiForm.fromDate ||
+            searchForm.from ||
+            "";
+
+        const nextTo =
+            interpretation?.extractedToDate ||
+            aiPreview?.extractedToDate ||
+            aiForm.toDate ||
+            searchForm.to ||
+            "";
+
+        const normalizedBudget =
+            interpretation?.budgetLevel ||
+            aiPreview?.budgetLevel ||
+            aiForm.budgetLevel ||
+            "medium";
+
+        const nextOrigin =
+            interpretation?.extractedOriginIata ||
+            interpretation?.extractedOriginCity ||
+            searchForm.origin ||
+            "Skopje";
+
+        const nextAiForm = {
+            ...aiForm,
+            originCity: interpretation?.extractedOriginCity || "",
+            budgetLevel: normalizedBudget,
+            people: nextAdults,
+            fromDate: interpretation?.extractedFromDate || aiPreview?.extractedFromDate || "",
+            toDate: interpretation?.extractedToDate || aiPreview?.extractedToDate || "",
+        };
+
+        const nextSearchForm = {
+            ...searchForm,
+            origin: originDisplayValue(nextOrigin),
+            from: nextFrom,
+            to: nextTo,
+            adults: nextAdults,
+            priceRange:
+                mapAiBudgetToPriceRange(interpretation?.budgetLevel) ||
+                mapAiBudgetToPriceRange(aiPreview?.budgetLevel) ||
+                mapAiBudgetToPriceRange(normalizedBudget) ||
+                searchForm.priceRange,
+        };
+
+        const matchedCountry =
+            countries.find((c) => c.code === option.countryCode || c.name === option.countryName) || null;
+
+        const selected = normalizeDestination(option);
+
+        setAiForm(nextAiForm);
+        setSearchForm(nextSearchForm);
+        setSelectedDestination(selected);
+        setActiveCountryName(matchedCountry?.name || option.countryName || "");
+
+        const codes = recommendations.map((r) => String(r?.cityCode || "").toUpperCase()).filter(Boolean);
+
+        await searchTripsWithDestination({
+            destinationObj: selected,
+            countryObj:
+                matchedCountry || {
+                    id: null,
+                    code: option.countryCode || "",
+                    name: option.countryName || "",
+                    imageUrl: null,
+                },
+            nextSearchForm,
+            nextAiForm,
+            nextCodes: codes,
+        });
+    }
+
     async function handleAiSearch() {
         setAiLoading(true);
         setAiError("");
@@ -570,7 +670,7 @@ export default function AiPlannerPage() {
 
         try {
             if (!aiForm.prompt || aiForm.prompt.trim().length < 8) {
-                throw new Error("Напиши барем 1-2 реченици за какво патување сакаш.");
+                throw new Error("Write at least 1-2 sentences about the trip you want.");
             }
 
             const dateMessage = validateDates(aiForm.fromDate, aiForm.toDate);
@@ -581,127 +681,51 @@ export default function AiPlannerPage() {
             const res = await recommendTripAi({
                 prompt: aiForm.prompt.trim(),
                 budgetLevel: aiForm.budgetLevel,
-                people: Number(aiForm.people || 1),
-                originCity: aiForm.originCity || null,
+                people: aiForm.people || null,
+                originCity: null,
                 fromDate: aiForm.fromDate || null,
                 toDate: aiForm.toDate || null,
             });
 
-            const interpretation = normalizeInterpretation(
-                res?.interpretation || null,
-                safePositiveInt(aiForm.people || searchForm.adults || 1, 1)
-            );
-
+            const interpretation = normalizeInterpretation(res?.interpretation || null, 1);
             const recommendations = Array.isArray(res?.recommendations) ? res.recommendations : [];
 
             if (!recommendations.length) {
-                throw new Error("AI не врати препораки.");
+                throw new Error(
+                    interpretation?.notes || "We currently do not support the requested destination."
+                );
             }
 
-            const codes = recommendations
-                .map((r) => String(r?.cityCode || "").toUpperCase())
-                .filter(Boolean);
-
-            setAiSuggestedCodes(codes);
-
-            const promptLower = normalizePromptText(aiForm.prompt);
-            const extractedDestinationText = normalizePromptText(
-                interpretation?.extractedDestinationText || aiPreview?.extractedDestinationText || ""
-            );
-
-            const interpretedCodes = Array.isArray(interpretation?.destinationCodes)
-                ? interpretation.destinationCodes.map((c) => String(c).toUpperCase())
-                : [];
-
-            const bestMatch =
-                recommendations.find((r) => interpretedCodes[0] === String(r?.cityCode || "").toUpperCase()) ||
-                recommendations.find((r) => interpretedCodes.includes(String(r?.cityCode || "").toUpperCase())) ||
-                recommendations.find(
-                    (r) => extractedDestinationText && normalizePromptText(r?.name) === extractedDestinationText
-                ) ||
-                recommendations.find(
-                    (r) => extractedDestinationText && normalizePromptText(r?.name).includes(extractedDestinationText)
-                ) ||
-                recommendations.find((r) => promptLower.includes(normalizePromptText(r?.name))) ||
-                recommendations[0];
-
-            if (!bestMatch?.cityCode) {
-                throw new Error("AI не врати валиден city code за дестинација.");
+            if (interpretation?.extractedOriginCity || interpretation?.extractedOriginIata) {
+                setAiForm((prev) => ({
+                    ...prev,
+                    originCity: interpretation.extractedOriginCity || "",
+                }));
+                setSearchForm((prev) => ({
+                    ...prev,
+                    origin: interpretation.extractedOriginIata || interpretation.extractedOriginCity || prev.origin,
+                }));
             }
 
-            const nextAdults = clampPeople(
-                interpretation?.extractedPeople ||
-                aiPreview?.extractedPeople ||
-                searchForm.adults ||
-                aiForm.people ||
-                1,
-                1
+            const uniqueOptions = recommendations.filter(
+                (item, index, arr) =>
+                    arr.findIndex(
+                        (x) =>
+                            String(x?.cityCode || "").toUpperCase() ===
+                            String(item?.cityCode || "").toUpperCase()
+                    ) === index
             );
 
-            const nextFrom =
-                interpretation?.extractedFromDate ||
-                aiPreview?.extractedFromDate ||
-                aiForm.fromDate ||
-                searchForm.from ||
-                "";
+            if (uniqueOptions.length > 1) {
+                setPendingSelection({ interpretation, recommendations: uniqueOptions });
+                setAiOptions(uniqueOptions);
+                setAiSuggestedCodes(
+                    uniqueOptions.map((r) => String(r?.cityCode || "").toUpperCase()).filter(Boolean)
+                );
+                return;
+            }
 
-            const nextTo =
-                interpretation?.extractedToDate ||
-                aiPreview?.extractedToDate ||
-                aiForm.toDate ||
-                searchForm.to ||
-                "";
-
-            const normalizedBudget =
-                interpretation?.budgetLevel ||
-                aiPreview?.budgetLevel ||
-                aiForm.budgetLevel ||
-                "medium";
-
-            const nextAiForm = {
-                ...aiForm,
-                budgetLevel: normalizedBudget,
-                people: nextAdults,
-                fromDate: interpretation?.extractedFromDate || aiPreview?.extractedFromDate || "",
-                toDate: interpretation?.extractedToDate || aiPreview?.extractedToDate || "",
-            };
-
-            const nextSearchForm = {
-                ...searchForm,
-                origin: originDisplayValue(resolveOriginToIata(searchForm.origin)),
-                from: nextFrom,
-                to: nextTo,
-                adults: nextAdults,
-                priceRange:
-                    mapAiBudgetToPriceRange(interpretation?.budgetLevel) ||
-                    mapAiBudgetToPriceRange(aiPreview?.budgetLevel) ||
-                    mapAiBudgetToPriceRange(normalizedBudget) ||
-                    searchForm.priceRange,
-            };
-
-            const matchedCountry =
-                countries.find((c) => c.code === bestMatch.countryCode || c.name === bestMatch.countryName) || null;
-
-            const selected = normalizeDestination(bestMatch);
-
-            setAiForm(nextAiForm);
-            setSearchForm(nextSearchForm);
-            setSelectedDestination(selected);
-            setActiveCountryName(matchedCountry?.name || bestMatch.countryName || "");
-
-            await searchTripsWithDestination({
-                destinationObj: selected,
-                countryObj:
-                    matchedCountry || {
-                        id: null,
-                        code: bestMatch.countryCode || "",
-                        name: bestMatch.countryName || "",
-                        imageUrl: null,
-                    },
-                nextSearchForm,
-                nextAiForm,
-                nextCodes: codes,
-            });
+            await handleDestinationOptionSelect(uniqueOptions[0], interpretation, uniqueOptions);
         } catch (e) {
             setAiError(e.message || "AI error");
         } finally {
@@ -719,13 +743,13 @@ export default function AiPlannerPage() {
                 <div className="relative z-10 mx-auto flex min-h-screen max-w-[1600px] flex-col px-4 pt-28 lg:px-6">
                     {error ? (
                         <div className="mb-6 rounded-2xl border border-rose-300/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100 backdrop-blur">
-                            ⚠️ {error}
+                            {error}
                         </div>
                     ) : null}
 
                     {aiError ? (
                         <div className="mb-6 rounded-2xl border border-rose-300/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100 backdrop-blur">
-                            ⚠️ {aiError}
+                            {aiError}
                         </div>
                     ) : null}
 
@@ -739,7 +763,7 @@ export default function AiPlannerPage() {
 
                             <p className="mt-5 max-w-xl text-sm leading-7 text-white/85 md:text-base">
                                 Describe your ideal journey and let TravelMindAI detect destination, travel dates,
-                                people and budget, then continue directly to{" "}
+                                origin city, people and budget, then continue directly to{" "}
                                 {tripMode === "HOTEL_ONLY" ? "hotels" : "flights"}.
                             </p>
 
@@ -771,9 +795,17 @@ export default function AiPlannerPage() {
                             <div className="mt-5 flex flex-wrap gap-2">
                                 <Badge tone="white">{selectedDestinationName}</Badge>
                                 <Badge tone="blue">{selectedCountryLabel}</Badge>
-                                <Badge tone="green">
-                                    {detectedPeople} traveler{Number(detectedPeople) > 1 ? "s" : ""}
+                                {detectedPeople ? (
+                                    <Badge tone="green">
+                                        {detectedPeople} traveler{Number(detectedPeople) > 1 ? "s" : ""}
+                                    </Badge>
+                                ) : null}
+                                <Badge tone="white">
+                                    From: {aiPreview?.extractedOriginIata || aiPreview?.extractedOriginCity || searchForm.origin}
                                 </Badge>
+                                {aiPreview?.confidence ? (
+                                    <Badge tone="yellow">{Math.round(aiPreview.confidence * 100)}% confidence</Badge>
+                                ) : null}
                             </div>
 
                             <div className="mt-8 flex flex-wrap gap-4">
@@ -792,133 +824,89 @@ export default function AiPlannerPage() {
                         </div>
 
                         <div className="w-full max-w-[620px] justify-self-end space-y-5 pb-12 lg:pb-20">
-                            <GlassCard className="p-6 bg-white/12 !border-white/15 !text-white backdrop-blur-xl">
-                                <div className="mb-5 flex items-center justify-between gap-3">
-                                    <div>
-                                        <div className="text-xl font-bold text-white">Write your travel idea</div>
-                                        <div className="mt-1 text-sm text-white/70">
-                                            Enter your request naturally and AI preview updates while you type.
-                                        </div>
+                            <AiPromptComposer
+                                value={aiForm.prompt}
+                                onChange={updatePrompt}
+                                autoFocus
+                            />
+
+                            <AiPreviewCard
+                                tripMode={tripMode}
+                                livePromptState={livePromptState}
+                                detectedDatesText={detectedDatesText}
+                                detectedPeople={detectedPeople}
+                                budgetPreview={budgetPreview}
+                                previewPriceRangeText={getBudgetPriceRangeText(previewPriceRange, searchForm?.targetCurrency || "EUR")}
+                                selectedDestinationName={selectedDestinationName}
+                                aiPreview={aiPreview}
+                            />
+
+                            {aiOptions.length > 1 ? (
+                                <GlassCard className="p-6 bg-white/12 !border-white/15 !text-white backdrop-blur-xl">
+                                    <div className="mb-4 text-xl font-bold text-white">
+                                        Choose a destination option
                                     </div>
 
-                                    <Badge tone="white">Prompt</Badge>
-                                </div>
-
-                                <div>
-                                    <label className="mb-3 block text-sm font-medium text-white/80">
-                                        Prompt
-                                    </label>
-
-                                    <textarea
-                                        ref={promptRef}
-                                        rows={8}
-                                        value={aiForm.prompt}
-                                        onChange={(e) => updatePrompt(e.target.value)}
-                                        placeholder="I want to go to New York just me, from 30.06.2026 to 07.07.2026 with medium budget..."
-                                        className="min-h-[260px] w-full resize-none rounded-[22px] border border-white/15 bg-white/10 px-5 py-5 text-[15px] leading-7 text-white placeholder:text-white/35 outline-none transition focus:border-white/30 focus:bg-white/15"
-                                    />
-
-                                    <div className="mt-4 flex items-center justify-between gap-3">
-                                        <div className="text-xs text-white/55">
-                                            Write destination, dates, people and style in one sentence.
-                                        </div>
-
-                                        <div className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white/75">
-                                            {aiForm.prompt?.length || 0} chars
-                                        </div>
+                                    <div className="space-y-3">
+                                        {aiOptions.map((option) => (
+                                            <button
+                                                key={option.cityCode}
+                                                type="button"
+                                                onClick={() =>
+                                                    handleDestinationOptionSelect(
+                                                        option,
+                                                        pendingSelection?.interpretation,
+                                                        pendingSelection?.recommendations || aiOptions
+                                                    )
+                                                }
+                                                className="w-full rounded-2xl border border-white/15 bg-white/10 px-4 py-4 text-left transition hover:bg-white/15"
+                                            >
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <div>
+                                                        <div className="text-base font-semibold text-white">{option.name}</div>
+                                                        <div className="mt-1 text-sm text-white/70">
+                                                            {option.countryName} · {option.cityCode}
+                                                        </div>
+                                                    </div>
+                                                    <Badge tone="blue">Select</Badge>
+                                                </div>
+                                            </button>
+                                        ))}
                                     </div>
-                                </div>
-                            </GlassCard>
+                                </GlassCard>
+                            ) : null}
 
-                            <GlassCard className="p-6 bg-white/12 !border-white/15 !text-white backdrop-blur-xl">
-                                <div className="mb-5 flex items-center justify-between gap-3">
-                                    <div>
-                                        <div className="text-xl font-bold text-white">AI preview</div>
-                                        <div className="mt-1 text-sm text-white/70">
-                                            Live interpretation while you type
-                                        </div>
-                                    </div>
-                                    <Badge tone="white">{livePromptState}</Badge>
-                                </div>
-
-                                <div className="space-y-3">
-                                    <div className="rounded-2xl bg-white/10 p-4">
-                                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/65">
-                                            Trip mode
-                                        </div>
-                                        <div className="mt-2 text-sm font-semibold text-white">
-                                            {tripMode === "HOTEL_ONLY" ? "Hotel only" : "Flight + Hotel"}
-                                        </div>
+                            {aiPreview?.candidateDestinations?.length ? (
+                                <GlassCard className="p-6 bg-white/12 !border-white/15 !text-white backdrop-blur-xl">
+                                    <div className="mb-4 text-xl font-bold text-white">
+                                        Candidate destinations
                                     </div>
 
-                                    <div className="rounded-2xl bg-white/10 p-4">
-                                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/65">
-                                            Detected dates
-                                        </div>
-                                        <div className="mt-2 text-sm font-semibold text-white">
-                                            {detectedDatesText}
-                                        </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {aiPreview.candidateDestinations.map((name) => (
+                                            <Badge key={name} tone="blue">
+                                                {name}
+                                            </Badge>
+                                        ))}
+                                    </div>
+                                </GlassCard>
+                            ) : null}
+
+                            {aiPreview?.candidateCountries?.length ? (
+                                <GlassCard className="p-6 bg-white/12 !border-white/15 !text-white backdrop-blur-xl">
+                                    <div className="mb-4 text-xl font-bold text-white">
+                                        Candidate countries
                                     </div>
 
-                                    <div className="rounded-2xl bg-white/10 p-4">
-                                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/65">
-                                            Detected duration
-                                        </div>
-                                        <div className="mt-2 text-sm font-semibold text-white">
-                                            {aiPreview?.extractedDurationDays
-                                                ? `${aiPreview.extractedDurationDays} days`
-                                                : "Will be detected from text"}
-                                        </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {aiPreview.candidateCountries.map((name) => (
+                                            <Badge key={name} tone="green">
+                                                {name}
+                                            </Badge>
+                                        ))}
                                     </div>
-
-                                    <div className="rounded-2xl bg-white/10 p-4">
-                                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/65">
-                                            Detected people
-                                        </div>
-                                        <div className="mt-2 text-sm font-semibold text-white">
-                                            {detectedPeople || "Will be detected from text"}
-                                        </div>
-                                    </div>
-
-                                    <div className="rounded-2xl bg-white/10 p-4">
-                                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/65">
-                                            Detected budget
-                                        </div>
-
-                                        <div className="mt-2 flex items-center gap-2">
-                                            <span className="text-sm font-semibold text-white">
-                                                {budgetPreview.label}
-                                            </span>
-                                        </div>
-
-                                        <div className="mt-2 text-sm text-white/75">
-                                            {budgetPreview.description}
-                                        </div>
-
-                                        <div className="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-white/55">
-                                            Expected hotel range: {budgetPreview.rangeText}
-                                        </div>
-                                    </div>
-
-                                    <div className="rounded-2xl bg-white/10 p-4">
-                                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/65">
-                                            Search price filter
-                                        </div>
-                                        <div className="mt-2 text-sm font-semibold text-white">
-                                            {getBudgetPriceRangeText(previewPriceRange, searchForm?.targetCurrency || "EUR")}
-                                        </div>
-                                    </div>
-
-                                    <div className="rounded-2xl bg-white/10 p-4">
-                                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/65">
-                                            Destination status
-                                        </div>
-                                        <div className="mt-2 text-sm font-semibold text-white">
-                                            {selectedDestinationName}
-                                        </div>
-                                    </div>
-                                </div>
-                            </GlassCard>
+                                </GlassCard>
+                            ) : null}
 
                             {aiSuggestedCodes.length > 0 && (
                                 <GlassCard className="p-6 bg-white/12 !border-white/15 !text-white backdrop-blur-xl">

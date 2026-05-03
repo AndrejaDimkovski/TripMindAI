@@ -24,6 +24,17 @@ function GlassPanel({ children, className = "" }) {
     );
 }
 
+function isValidEmail(email) {
+    return /^[\w.-]+@[\w.-]+\.[A-Za-z]{2,}$/.test(email);
+}
+
+function isValidPassword(password) {
+    return password.length >= 8
+        && /[A-Z]/.test(password)
+        && /[0-9]/.test(password)
+        && /[!@#$%^&*(),.?":{}|<>]/.test(password);
+}
+
 export default function RegisterPage() {
     const nav = useNavigate();
 
@@ -43,12 +54,40 @@ export default function RegisterPage() {
         e.preventDefault();
         setErr("");
 
-        if (!form.firstName.trim()) return setErr("Enter your first name.");
-        if (!form.lastName.trim()) return setErr("Enter your last name.");
-        if (!form.email.trim()) return setErr("Enter your email.");
-        if (!form.password) return setErr("Enter your password.");
-        if (form.password.length < 8) return setErr("Password must be at least 8 characters long.");
-        if (form.password !== form.confirm) return setErr("Passwords do not match.");
+        if (!form.firstName.trim()) {
+            setErr("Enter your first name.");
+            return;
+        }
+
+        if (!form.lastName.trim()) {
+            setErr("Enter your last name.");
+            return;
+        }
+
+        if (!form.email.trim()) {
+            setErr("Enter your email.");
+            return;
+        }
+
+        if (!isValidEmail(form.email.trim())) {
+            setErr("Email is not valid.");
+            return;
+        }
+
+        if (!form.password) {
+            setErr("Enter your password.");
+            return;
+        }
+
+        if (!isValidPassword(form.password)) {
+            setErr("Password must contain at least 8 characters, one uppercase letter, one number, and one special character.");
+            return;
+        }
+
+        if (form.password !== form.confirm) {
+            setErr("Passwords do not match.");
+            return;
+        }
 
         setLoading(true);
         try {
@@ -89,7 +128,7 @@ export default function RegisterPage() {
                                     </h1>
 
                                     <p className="mt-5 max-w-xl text-sm leading-7 text-white/85 md:text-base">
-                                        Join TravelMindAI and start building your next trip.
+                                        Join TripMindAI and start building your next trip.
                                     </p>
 
                                     <div className="mt-8 flex flex-wrap gap-3">
@@ -116,7 +155,7 @@ export default function RegisterPage() {
                                                 <div>
                                                     <div className="text-2xl font-bold text-white">Create account</div>
                                                     <div className="text-sm text-white/65">
-                                                        Start your TravelMindAI journey
+                                                        Start your TripMindAI journey
                                                     </div>
                                                 </div>
                                             </div>
