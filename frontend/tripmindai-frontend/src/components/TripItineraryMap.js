@@ -3,7 +3,40 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-function activityColor(type) {
+function timeSlotColor(slot) {
+    switch (String(slot || "").toUpperCase()) {
+        case "MORNING":
+            return "#facc15";
+        case "AFTERNOON":
+            return "#38bdf8";
+        case "EVENING":
+            return "#c084fc";
+        case "OTHER":
+            return "#34d399";
+        default:
+            return null;
+    }
+}
+
+function timeSlotLabel(slot) {
+    switch (String(slot || "").toUpperCase()) {
+        case "MORNING":
+            return "Morning";
+        case "AFTERNOON":
+            return "Afternoon";
+        case "EVENING":
+            return "Evening";
+        case "OTHER":
+            return "Other";
+        default:
+            return String(slot || "N/A");
+    }
+}
+
+function activityColor(type, timeSlot) {
+    const slotColor = timeSlotColor(timeSlot);
+    if (slotColor) return slotColor;
+
     switch (String(type || "").toLowerCase()) {
         case "museum":
             return "#6366f1";
@@ -55,8 +88,8 @@ function activityTypeText(type) {
     return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
-function createNumberedIcon(number, type) {
-    const color = activityColor(type);
+function createNumberedIcon(number, type, timeSlot) {
+    const color = activityColor(type, timeSlot);
     const emoji = activityEmoji(type);
 
     return L.divIcon({
@@ -156,8 +189,8 @@ export default function TripItineraryMap({ day }) {
                 name: safeText(a.name, `Activity ${idx + 1}`),
                 description: safeText(a.description, "No description available."),
                 type: safeText(a.type, "landmark"),
-                timeSlot: safeText(a.timeSlot, "—"),
-                zoneName: safeText(a.zoneName, "—"),
+                timeSlot: safeText(a.timeSlot, "N/A"),
+                zoneName: safeText(a.zoneName, "N/A"),
                 estimatedMinutes: a.estimatedMinutes,
                 optional: !!a.optional,
                 position: [Number(a.lat), Number(a.lng)],
@@ -328,7 +361,7 @@ export default function TripItineraryMap({ day }) {
                         <Marker
                             key={point.id}
                             position={point.position}
-                            icon={createNumberedIcon(idx + 1, point.type)}
+                            icon={createNumberedIcon(idx + 1, point.type, point.timeSlot)}
                         >
                             <Popup>
                                 <div className="w-[240px]">
@@ -341,10 +374,10 @@ export default function TripItineraryMap({ day }) {
                                             {activityEmoji(point.type)} {activityTypeText(point.type)}
                                         </span>
                                         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
-                                            🕒 {point.timeSlot}
+                                            Slot: {timeSlotLabel(point.timeSlot)}
                                         </span>
                                         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
-                                            ⏱ {fmtMinutes(point.estimatedMinutes)}
+                                            Time: {fmtMinutes(point.estimatedMinutes)}
                                         </span>
                                     </div>
 
@@ -353,7 +386,7 @@ export default function TripItineraryMap({ day }) {
                                     </div>
 
                                     <div className="mt-3 text-[11px] text-slate-500">
-                                        📍 Zone: {point.zoneName}
+                                        Zone: {point.zoneName}
                                     </div>
 
                                     {point.optional && (

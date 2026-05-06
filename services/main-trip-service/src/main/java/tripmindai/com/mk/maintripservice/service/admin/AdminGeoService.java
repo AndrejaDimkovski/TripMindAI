@@ -7,27 +7,24 @@ import tripmindai.com.mk.maintripservice.model.Country;
 import tripmindai.com.mk.maintripservice.model.Destination;
 import tripmindai.com.mk.maintripservice.repository.CountryRepository;
 import tripmindai.com.mk.maintripservice.repository.DestinationRepository;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.util.UUID;
+import tripmindai.com.mk.maintripservice.service.storage.ObjectStorageService;
 
 @Service
 @Transactional
 public class AdminGeoService {
 
-    private static final String DEFAULT_EXTENSION = ".jpg";
-
     private final CountryRepository countryRepo;
     private final DestinationRepository destRepo;
-    private final Path root = Paths.get("uploads");
+    private final ObjectStorageService objectStorageService;
 
-    public AdminGeoService(CountryRepository countryRepo, DestinationRepository destRepo) {
+    public AdminGeoService(
+            CountryRepository countryRepo,
+            DestinationRepository destRepo,
+            ObjectStorageService objectStorageService
+    ) {
         this.countryRepo = countryRepo;
         this.destRepo = destRepo;
+        this.objectStorageService = objectStorageService;
     }
 
     public Country createCountry(String code, String name, MultipartFile image) {
@@ -115,31 +112,7 @@ public class AdminGeoService {
     }
 
     private String saveFile(MultipartFile file, String folder) {
-        if (file == null || file.isEmpty()) {
-            return null;
-        }
-
-        try {
-            Path directory = root.resolve(folder);
-            Files.createDirectories(directory);
-
-            String fileName = UUID.randomUUID() + extractExtension(file.getOriginalFilename());
-            Path target = directory.resolve(fileName);
-
-            Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
-            return "/uploads/" + folder + "/" + fileName;
-        } catch (IOException e) {
-            throw new RuntimeException("Cannot save file", e);
-        }
-    }
-
-    private String extractExtension(String originalFilename) {
-        if (originalFilename == null || originalFilename.isBlank()) {
-            return DEFAULT_EXTENSION;
-        }
-
-        int dotIndex = originalFilename.lastIndexOf('.');
-        return dotIndex >= 0 ? originalFilename.substring(dotIndex) : DEFAULT_EXTENSION;
+        return objectStorageService.uploadImage(file, folder);
     }
 
     private String trimToNull(String value) {

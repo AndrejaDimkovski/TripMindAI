@@ -4,7 +4,7 @@ import { deleteMyPlan, getMyPlans } from "../api/planApi";
 import { generateTripItinerary } from "../api/itineraryApi";
 import TripItineraryMap from "../components/TripItineraryMap";
 
-function displayValue(value, fallback = "—") {
+function displayValue(value, fallback = "N/A") {
     if (value == null) return fallback;
     if (typeof value === "string" && value.trim() === "") return fallback;
     return value;
@@ -16,7 +16,7 @@ function fmtMoney(v) {
 }
 
 function fmtDateDisplay(value) {
-    if (!value) return "—";
+    if (!value) return "N/A";
     try {
         const d = new Date(value);
         if (Number.isNaN(d.getTime())) {
@@ -36,7 +36,7 @@ function fmtDateDisplay(value) {
 }
 
 function fmtDateTime(value) {
-    if (!value) return "—";
+    if (!value) return "N/A";
     try {
         const d = new Date(value);
         if (Number.isNaN(d.getTime())) return String(value).replace("T", " ").slice(0, 16);
@@ -55,12 +55,12 @@ function fmtDateTime(value) {
 
 function fmtCoord(value) {
     const n = Number(value);
-    return Number.isFinite(n) ? n.toFixed(6) : "—";
+    return Number.isFinite(n) ? n.toFixed(6) : "N/A";
 }
 
 function fmtMinutes(value) {
     const n = Number(value);
-    return Number.isFinite(n) && n > 0 ? `${n} min` : "—";
+    return Number.isFinite(n) && n > 0 ? `${n} min` : "N/A";
 }
 
 function calculateNights(from, to) {
@@ -86,40 +86,123 @@ function itineraryDaysCount(plan, itinerary) {
     return nights;
 }
 
-function activityEmoji(type) {
+function ActivityIcon({ type }) {
+    const svgClass = "h-5 w-5";
+    const svgProps = {
+        className: svgClass,
+        viewBox: "0 0 24 24",
+        fill: "none",
+        stroke: "currentColor",
+        strokeWidth: "2",
+        strokeLinecap: "round",
+        strokeLinejoin: "round",
+        "aria-hidden": "true",
+    };
+
     switch (String(type || "").toLowerCase()) {
         case "museum":
-            return "🏛️";
+            return (
+                <svg {...svgProps}>
+                    <path d="M3 9l9-5 9 5" />
+                    <path d="M4 10h16" />
+                    <path d="M6 10v8" />
+                    <path d="M10 10v8" />
+                    <path d="M14 10v8" />
+                    <path d="M18 10v8" />
+                    <path d="M4 18h16" />
+                    <path d="M3 21h18" />
+                </svg>
+            );
         case "restaurant":
-            return "🍽️";
+            return (
+                <svg {...svgProps}>
+                    <path d="M6 3v7" />
+                    <path d="M9 3v7" />
+                    <path d="M6 7h3" />
+                    <path d="M7.5 10v11" />
+                    <path d="M17 3v18" />
+                    <path d="M14 3h3a3 3 0 0 1 0 6h-3" />
+                </svg>
+            );
         case "walking_route":
-            return "🚶";
+            return (
+                <svg {...svgProps}>
+                    <path d="M13 4a2 2 0 1 0-4 0 2 2 0 0 0 4 0z" />
+                    <path d="M10.5 7l-2 5 4 2 2.5 5" />
+                    <path d="M8.5 12L6 20" />
+                    <path d="M12.5 14l4-2" />
+                    <path d="M18 20h.01" />
+                    <path d="M21 18h.01" />
+                </svg>
+            );
         case "park":
-            return "🌳";
+            return (
+                <svg {...svgProps}>
+                    <path d="M12 21v-7" />
+                    <path d="M8 14h8" />
+                    <path d="M12 3l-5 7h10l-5-7z" />
+                    <path d="M12 7l-4 6h8l-4-6z" />
+                </svg>
+            );
         case "shopping":
-            return "🛍️";
+            return (
+                <svg {...svgProps}>
+                    <path d="M6 8h12l-1 13H7L6 8z" />
+                    <path d="M9 8a3 3 0 0 1 6 0" />
+                    <path d="M9 12h.01" />
+                    <path d="M15 12h.01" />
+                </svg>
+            );
         case "viewpoint":
-            return "🌇";
+            return (
+                <svg {...svgProps}>
+                    <path d="M3 20h18" />
+                    <path d="M5 20l5-8 4 5 3-4 4 7" />
+                    <path d="M7 7a3 3 0 1 0 6 0 3 3 0 0 0-6 0z" />
+                </svg>
+            );
         case "beach":
-            return "🏖️";
+            return (
+                <svg {...svgProps}>
+                    <path d="M4 11a8 8 0 0 1 16 0" />
+                    <path d="M12 11v10" />
+                    <path d="M8 21h8" />
+                    <path d="M4 16c2 1.5 4 1.5 6 0s4-1.5 6 0 3 1 4 0" />
+                </svg>
+            );
         case "nightlife":
-            return "🌙";
+            return (
+                <svg {...svgProps}>
+                    <path d="M18 15.5A7 7 0 0 1 8.5 6a7 7 0 1 0 9.5 9.5z" />
+                    <path d="M17 4h.01" />
+                    <path d="M20 8h.01" />
+                </svg>
+            );
         default:
-            return "📍";
+            return (
+                <svg {...svgProps}>
+                    <path d="M12 21s7-4.5 7-11a7 7 0 0 0-14 0c0 6.5 7 11 7 11z" />
+                    <path d="M12 10.5h.01" />
+                </svg>
+            );
     }
 }
 
-function normalizeSlotLabel(slot) {
-    switch (slot) {
+function slotPresentation(slot) {
+    switch (String(slot || "").toUpperCase()) {
         case "MORNING":
-            return "☀️ Morning";
+            return { label: "Morning", eyebrow: "Start the day", dot: "bg-amber-300", border: "border-amber-300/25", glow: "shadow-[0_0_32px_rgba(252,211,77,0.12)]" };
         case "AFTERNOON":
-            return "🌤️ Afternoon";
+            return { label: "Afternoon", eyebrow: "Explore deeper", dot: "bg-sky-300", border: "border-sky-300/25", glow: "shadow-[0_0_32px_rgba(125,211,252,0.12)]" };
         case "EVENING":
-            return "🌙 Evening";
+            return { label: "Evening", eyebrow: "Slow down", dot: "bg-violet-300", border: "border-violet-300/25", glow: "shadow-[0_0_32px_rgba(196,181,253,0.12)]" };
         default:
-            return "🧭 Other";
+            return { label: "Other", eyebrow: "Flexible stops", dot: "bg-emerald-300", border: "border-emerald-300/25", glow: "shadow-[0_0_32px_rgba(110,231,183,0.12)]" };
     }
+}
+
+function slotLabel(slot) {
+    return slotPresentation(slot).label;
 }
 
 function groupActivitiesByTimeSlot(activities) {
@@ -149,15 +232,15 @@ function activityTypeText(type) {
 }
 
 function formatTripType(value) {
-    if (!value) return "—";
+    if (!value) return "N/A";
     return value === "ROUND_TRIP" ? "Round trip" : "One way";
 }
 
 function formatStops(stops) {
-    if (stops == null || stops === "") return "—";
+    if (stops == null || stops === "") return "N/A";
 
     const n = Number(stops);
-    if (!Number.isFinite(n)) return "—";
+    if (!Number.isFinite(n)) return "N/A";
     if (n <= 0) return "Direct";
     if (n === 1) return "1 stop";
     return `${n} stops`;
@@ -185,11 +268,11 @@ function planOriginLabel(plan) {
 }
 
 function flightRouteLabel(plan) {
-    return `${planOriginLabel(plan)} → ${planDestinationLabel(plan)}`;
+    return `${planOriginLabel(plan)} to ${planDestinationLabel(plan)}`;
 }
 
 function flightAirportRouteLabel(plan) {
-    return `${displayValue(plan?.flightOriginIata)} → ${displayValue(plan?.flightDestIata)}`;
+    return `${displayValue(plan?.flightOriginIata)} to ${displayValue(plan?.flightDestIata)}`;
 }
 
 function formatBoardType(value) {
@@ -283,6 +366,85 @@ function InfoTile({ label, value }) {
     );
 }
 
+function ActivityTimelineSlot({ slot, activities }) {
+    if (!activities?.length) return null;
+
+    const meta = slotPresentation(slot);
+
+    return (
+        <div className={`relative rounded-[26px] border ${meta.border} bg-white/10 p-4 ${meta.glow}`}>
+            <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/50">
+                        {meta.eyebrow}
+                    </div>
+                    <div className="mt-1 text-lg font-bold text-white">{meta.label}</div>
+                </div>
+                <Badge tone="light">
+                    {activities.length} stop{activities.length > 1 ? "s" : ""}
+                </Badge>
+            </div>
+
+            <div className="relative space-y-4 pl-6 before:absolute before:left-[11px] before:top-2 before:h-[calc(100%-1rem)] before:w-px before:bg-white/15">
+                {activities.map((activity, idx) => (
+                    <div key={`${slot}-${idx}-${activity.name}`} className="relative">
+                        <div className={`absolute -left-6 top-1 flex h-6 w-6 items-center justify-center rounded-full ${meta.dot} text-[11px] font-black text-slate-950 ring-4 ring-[#102131]`}>
+                            {idx + 1}
+                        </div>
+
+                        <div className="rounded-[22px] border border-white/10 bg-slate-950/20 p-4 transition hover:bg-white/10">
+                            <div className="mb-3 flex items-start gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/15 text-sm font-black text-white">
+                                    <ActivityIcon type={activity.type} />
+                                </div>
+
+                                <div className="flex-1">
+                                    <div className="text-sm font-bold text-white">
+                                        {displayValue(activity.name, "Activity")}
+                                    </div>
+                                    <div className="mt-1 text-xs text-white/55">
+                                        {activityTypeText(activity.type)}
+                                    </div>
+                                </div>
+
+                                {activity.optional ? <Badge tone="yellow">Optional</Badge> : null}
+                            </div>
+
+                            <div className="text-sm leading-6 text-white/75">
+                                {displayValue(activity.description)}
+                            </div>
+
+                            <div className="mt-3 flex flex-wrap gap-2 text-xs text-white/60">
+                                {activity.estimatedMinutes ? (
+                                    <span className="rounded-full bg-white/10 px-3 py-1">
+                                        Time: {fmtMinutes(activity.estimatedMinutes)}
+                                    </span>
+                                ) : null}
+
+                                {activity.zoneName ? (
+                                    <span className="rounded-full bg-white/10 px-3 py-1">
+                                        Area: {activity.zoneName}
+                                    </span>
+                                ) : null}
+
+                                {activity.timeSlot ? (
+                                    <span className="rounded-full bg-white/10 px-3 py-1">
+                                        Slot: {slotLabel(activity.timeSlot)}
+                                    </span>
+                                ) : null}
+                            </div>
+
+                            <div className="mt-2 text-xs text-white/35">
+                                lat: {fmtCoord(activity.lat)} | lng: {fmtCoord(activity.lng)}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 function PlanDetailsModal({ plan, onClose }) {
     if (!plan) return null;
 
@@ -320,11 +482,11 @@ function PlanDetailsModal({ plan, onClose }) {
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <InfoTile
                         label="Travel dates"
-                        value={`${fmtDateDisplay(plan.fromDate)} → ${fmtDateDisplay(plan.toDate)}`}
+                        value={`${fmtDateDisplay(plan.fromDate)} to ${fmtDateDisplay(plan.toDate)}`}
                     />
                     <InfoTile
                         label="Guests / Nights"
-                        value={`${plan.adults || 1} guest${Number(plan.adults || 1) > 1 ? "s" : ""}${nights ? ` · ${nights} night${nights > 1 ? "s" : ""}` : ""}`}
+                        value={`${plan.adults || 1} guest${Number(plan.adults || 1) > 1 ? "s" : ""}${nights ? ` / ${nights} night${nights > 1 ? "s" : ""}` : ""}`}
                     />
                     <InfoTile
                         label="Route"
@@ -340,7 +502,7 @@ function PlanDetailsModal({ plan, onClose }) {
                     {!hotelOnly ? (
                         <GlassPanel className="p-5 text-white">
                             <div className="mb-4 flex items-center justify-between">
-                                <h3 className="text-xl font-bold">✈️ Flight summary</h3>
+                                <h3 className="text-xl font-bold">Flight summary</h3>
                                 <Badge tone="green">{formatTripType(plan.flightTripType)}</Badge>
                             </div>
 
@@ -364,7 +526,7 @@ function PlanDetailsModal({ plan, onClose }) {
 
                     <GlassPanel className="p-5 text-white">
                         <div className="mb-4 flex items-center justify-between">
-                            <h3 className="text-xl font-bold">🏨 Hotel summary</h3>
+                            <h3 className="text-xl font-bold">Hotel summary</h3>
                             <Badge tone="blue">{displayValue(plan.hotelName, "Hotel")}</Badge>
                         </div>
 
@@ -386,7 +548,7 @@ function PlanDetailsModal({ plan, onClose }) {
                 <div className="mt-6">
                     <GlassPanel className="p-5 text-white">
                         <div className="mb-4 flex items-center justify-between">
-                            <h3 className="text-xl font-bold">💳 Final recap</h3>
+                            <h3 className="text-xl font-bold">Final recap</h3>
                             <Badge tone="yellow">Saved plan</Badge>
                         </div>
 
@@ -495,10 +657,10 @@ export default function MyPlansPage() {
 
     return (
         <div className="min-h-screen bg-[#0b1620]">
-            <section className="relative min-h-[52vh] overflow-hidden">
-                <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1800&auto=format&fit=crop')] bg-cover bg-center" />
-                <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,14,20,0.88)_0%,rgba(8,18,28,0.68)_36%,rgba(8,18,28,0.34)_68%,rgba(8,18,28,0.28)_100%)]" />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.12),transparent_30%)]" />
+            <section className="relative min-h-screen overflow-hidden">
+                <div className="fixed inset-0 bg-[url('https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1800&auto=format&fit=crop')] bg-cover bg-center bg-fixed" />
+                <div className="fixed inset-0 bg-[linear-gradient(90deg,rgba(7,14,20,0.90)_0%,rgba(8,18,28,0.74)_36%,rgba(8,18,28,0.44)_68%,rgba(8,18,28,0.34)_100%)]" />
+                <div className="fixed inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.14),transparent_30%)]" />
 
                 <div className="relative z-10 mx-auto w-full max-w-[1500px] px-4 pb-20 pt-24 lg:px-6">
                     <div className="grid items-start gap-8 xl:grid-cols-[1.15fr_0.85fr]">
@@ -515,7 +677,7 @@ export default function MyPlansPage() {
 
                             <div className="mt-5 flex flex-wrap gap-2">
                                 <Badge tone="green">{plans.length} saved plans</Badge>
-                                <Badge tone="blue">€ {fmtMoney(totalSaved)} total value</Badge>
+                                <Badge tone="blue">EUR {fmtMoney(totalSaved)} total value</Badge>
                             </div>
                         </div>
 
@@ -523,7 +685,7 @@ export default function MyPlansPage() {
                             <GlassSection title="Overview" subtitle="Quick summary of your saved trips">
                                 <div className="grid gap-3 sm:grid-cols-2">
                                     <InfoTile label="Saved plans" value={plans.length} />
-                                    <InfoTile label="Total value" value={`€ ${fmtMoney(totalSaved)}`} />
+                                    <InfoTile label="Total value" value={`EUR ${fmtMoney(totalSaved)}`} />
                                 </div>
 
                                 <div className="mt-4 rounded-2xl border border-emerald-300/20 bg-emerald-500/20 p-4">
@@ -541,7 +703,7 @@ export default function MyPlansPage() {
                     {showSavedMessage ? (
                         <div className="mt-8">
                             <GlassPanel className="flex flex-col gap-3 p-4 text-white sm:flex-row sm:items-center sm:justify-between">
-                                <span className="text-sm">✅ Trip plan successfully saved.</span>
+                                <span className="text-sm">Trip plan successfully saved.</span>
                                 <HeroButton
                                     className="self-start sm:self-auto"
                                     onClick={() => setShowSavedMessage(false)}
@@ -573,7 +735,7 @@ export default function MyPlansPage() {
                         <div className="mt-8">
                             <GlassSection title="No saved plans" subtitle="Your trip list is still empty.">
                                 <div className="flex flex-col items-center justify-center py-6 text-center">
-                                    <div className="text-5xl">🧳</div>
+                                    <div className="text-5xl font-black tracking-[0.18em] text-white/70">EMPTY</div>
                                     <div className="mt-4 text-lg font-semibold text-white">
                                         You do not have any saved trip plans
                                     </div>
@@ -631,7 +793,7 @@ export default function MyPlansPage() {
                                                             Total price
                                                         </div>
                                                         <div className="mt-2 text-2xl font-bold text-white">
-                                                            € {fmtMoney(p.totalPrice)} {p.totalCurrency || "EUR"}
+                                                            EUR {fmtMoney(p.totalPrice)} {p.totalCurrency || "EUR"}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -639,11 +801,11 @@ export default function MyPlansPage() {
                                                 <div className="mb-4 grid gap-3 md:grid-cols-3">
                                                     <InfoTile
                                                         label="Trip dates"
-                                                        value={`${fmtDateDisplay(p.fromDate)} → ${fmtDateDisplay(p.toDate)}`}
+                                                        value={`${fmtDateDisplay(p.fromDate)} to ${fmtDateDisplay(p.toDate)}`}
                                                     />
                                                     <InfoTile
                                                         label="Guests / Itinerary days"
-                                                        value={`${p.adults || 1} guest${Number(p.adults || 1) > 1 ? "s" : ""}${itineraryDayCount ? ` • ${itineraryDayCount} day${itineraryDayCount > 1 ? "s" : ""}` : ""}`}
+                                                        value={`${p.adults || 1} guest${Number(p.adults || 1) > 1 ? "s" : ""}${itineraryDayCount ? ` / ${itineraryDayCount} day${itineraryDayCount > 1 ? "s" : ""}` : ""}`}
                                                     />
                                                     <InfoTile
                                                         label="Route"
@@ -654,7 +816,7 @@ export default function MyPlansPage() {
                                                 <div className={`grid gap-4 ${hotelOnly ? "lg:grid-cols-1" : "lg:grid-cols-2"}`}>
                                                     {!hotelOnly ? (
                                                         <div className="rounded-2xl bg-white/10 p-4">
-                                                            <div className="mb-3 text-lg font-semibold text-white">✈️ Flight</div>
+                                                            <div className="mb-3 text-lg font-semibold text-white">Flight</div>
 
                                                             <div className="space-y-2 text-sm text-white/75">
                                                                 <div><b className="text-white">Route:</b> {flightRouteLabel(p)}</div>
@@ -663,16 +825,16 @@ export default function MyPlansPage() {
                                                                 <div><b className="text-white">Departure:</b> {fmtDateTime(p.flightDepartureAt)}</div>
                                                                 <div><b className="text-white">Arrival:</b> {fmtDateTime(p.flightArrivalAt)}</div>
                                                                 {p.returnFlightDepartureAt || p.returnFlightArrivalAt ? (
-                                                                    <div><b className="text-white">Return:</b> {fmtDateTime(p.returnFlightDepartureAt)} → {fmtDateTime(p.returnFlightArrivalAt)}</div>
+                                                                    <div><b className="text-white">Return:</b> {fmtDateTime(p.returnFlightDepartureAt)} to {fmtDateTime(p.returnFlightArrivalAt)}</div>
                                                                 ) : null}
                                                                 <div><b className="text-white">Stops:</b> {formatStops(p.flightStops)}</div>
-                                                                <div><b className="text-white">Price:</b> € {fmtMoney(p.flightPrice)} {p.flightCurrency || "EUR"}</div>
+                                                                <div><b className="text-white">Price:</b> EUR {fmtMoney(p.flightPrice)} {p.flightCurrency || "EUR"}</div>
                                                             </div>
                                                         </div>
                                                     ) : null}
 
                                                     <div className="rounded-2xl bg-white/10 p-4">
-                                                        <div className="mb-3 text-lg font-semibold text-white">🏨 Hotel</div>
+                                                        <div className="mb-3 text-lg font-semibold text-white">Hotel</div>
 
                                                         <div className="space-y-2 text-sm text-white/75">
                                                             <div><b className="text-white">Name:</b> {displayValue(p.hotelName)}</div>
@@ -680,14 +842,14 @@ export default function MyPlansPage() {
                                                             <div><b className="text-white">Check-out:</b> {fmtDateDisplay(p.hotelCheckOutDate || p.toDate)}</div>
                                                             {boardTypeText ? <div><b className="text-white">Board:</b> {boardTypeText}</div> : null}
                                                             {paymentPolicyText ? <div><b className="text-white">Payment:</b> {paymentPolicyText}</div> : null}
-                                                            <div><b className="text-white">Price:</b> € {fmtMoney(p.hotelPrice)} {p.hotelCurrency || "EUR"}</div>
+                                                            <div><b className="text-white">Price:</b> EUR {fmtMoney(p.hotelPrice)} {p.hotelCurrency || "EUR"}</div>
                                                         </div>
                                                     </div>
                                                 </div>
 
                                                 <div className="mt-5 flex flex-wrap gap-3">
                                                     <HeroButton onClick={() => setDetailsPlan(p)} type="button">
-                                                        View booking summary
+                                                        View trip summary
                                                     </HeroButton>
 
                                                     <HeroButton
@@ -776,72 +938,31 @@ export default function MyPlansPage() {
                                                                 <InfoTile label="Walking" value={fmtMinutes(selectedDay.totalWalkingMinutes)} />
                                                             </div>
 
-                                                            <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+                                                            <div className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
                                                                 <div className="space-y-4">
-                                                                    {["MORNING", "AFTERNOON", "EVENING", "OTHER"].map((slot) => {
-                                                                        const items = groupedActivities[slot] || [];
-                                                                        if (!items.length) return null;
 
-                                                                        return (
-                                                                            <div key={slot} className="rounded-2xl bg-white/10 p-4">
-                                                                                <div className="mb-3 text-sm font-semibold text-white">
-                                                                                    {normalizeSlotLabel(slot)}
-                                                                                </div>
-
-                                                                                <div className="space-y-3">
-                                                                                    {items.map((activity, idx) => (
-                                                                                        <div
-                                                                                            key={`${slot}-${idx}-${activity.name}`}
-                                                                                            className="rounded-2xl border border-white/10 bg-white/10 p-4"
-                                                                                        >
-                                                                                            <div className="mb-3 flex items-start gap-3">
-                                                                                                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/15 text-lg">
-                                                                                                    {activityEmoji(activity.type)}
-                                                                                                </div>
-
-                                                                                                <div className="flex-1">
-                                                                                                    <div className="text-sm font-bold text-white">
-                                                                                                        {displayValue(activity.name, "Activity")}
-                                                                                                    </div>
-                                                                                                    <div className="text-xs text-white/55">
-                                                                                                        {activityTypeText(activity.type)}
-                                                                                                    </div>
-                                                                                                </div>
-
-                                                                                                {activity.optional ? <Badge tone="yellow">Optional</Badge> : null}
-                                                                                            </div>
-
-                                                                                            <div className="text-sm leading-6 text-white/75">
-                                                                                                {displayValue(activity.description)}
-                                                                                            </div>
-
-                                                                                            <div className="mt-3 flex flex-wrap gap-3 text-xs text-white/55">
-                                                                                                {activity.estimatedMinutes ? (
-                                                                                                    <span>⏱ {fmtMinutes(activity.estimatedMinutes)}</span>
-                                                                                                ) : null}
-
-                                                                                                {activity.zoneName ? (
-                                                                                                    <span>📍 {activity.zoneName}</span>
-                                                                                                ) : null}
-
-                                                                                                {activity.timeSlot ? (
-                                                                                                    <span>🕒 {activity.timeSlot}</span>
-                                                                                                ) : null}
-                                                                                            </div>
-
-                                                                                            <div className="mt-2 text-xs text-white/40">
-                                                                                                lat: {fmtCoord(activity.lat)} | lng: {fmtCoord(activity.lng)}
-                                                                                            </div>
-                                                                                        </div>
-                                                                                    ))}
-                                                                                </div>
-                                                                            </div>
-                                                                        );
-                                                                    })}
+                                                                    {["MORNING", "AFTERNOON", "EVENING", "OTHER"].map((slot) => (
+                                                                        <ActivityTimelineSlot
+                                                                            key={slot}
+                                                                            slot={slot}
+                                                                            activities={groupedActivities[slot] || []}
+                                                                        />
+                                                                    ))}
                                                                 </div>
 
-                                                                <div className="min-h-[420px] overflow-hidden rounded-[28px] border border-white/10 bg-white/10">
-                                                                    <TripItineraryMap day={selectedDay} />
+                                                                <div className="xl:sticky xl:top-24">
+                                                                    <div className="overflow-hidden rounded-[30px] border border-white/10 bg-white/10 shadow-2xl backdrop-blur-xl">
+                                                                        <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-white/8 px-4 py-3">
+                                                                            <div>
+                                                                                <div className="text-sm font-bold text-white">Live route preview</div>
+                                                                                <div className="text-xs text-white/55">Map stays visible while you read the day plan.</div>
+                                                                            </div>
+                                                                            <Badge tone="green">Map</Badge>
+                                                                        </div>
+                                                                        <div className="min-h-[460px]">
+                                                                            <TripItineraryMap day={selectedDay} />
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         </div>

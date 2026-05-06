@@ -29,11 +29,12 @@ export default function AiPromptComposer({
                                              value,
                                              onChange,
                                              autoFocus = false,
-                                             title = "Write your travel idea",
+                                             title = "Write your trip idea",
                                              subtitle = "Enter your request naturally and AI preview updates while you type.",
                                              badge = "Prompt",
                                              placeholder = "I want to go to New York just me, from 30.06.2026 to 07.07.2026 with medium budget...",
                                              minRows = 8,
+                                             maxLength,
                                          }) {
     const promptRef = useRef(null);
 
@@ -64,6 +65,7 @@ export default function AiPromptComposer({
                     rows={minRows}
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
+                    maxLength={maxLength}
                     placeholder={placeholder}
                     className="min-h-[260px] w-full resize-none rounded-[22px] border border-white/15 bg-white/10 px-5 py-5 text-[15px] leading-7 text-white placeholder:text-white/35 outline-none transition focus:border-white/30 focus:bg-white/15"
                 />
@@ -74,7 +76,7 @@ export default function AiPromptComposer({
                     </div>
 
                     <div className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white/75">
-                        {value?.length || 0} chars
+                        {value?.length || 0}{maxLength ? ` / ${maxLength}` : ""} chars
                     </div>
                 </div>
             </div>

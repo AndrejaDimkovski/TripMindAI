@@ -1,5 +1,6 @@
 package tripmindai.com.mk.flightsservice.service;
 
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import tripmindai.com.mk.flightsservice.config.BookingRapidApiClient;
 import tripmindai.com.mk.flightsservice.dto.FlightDestinationDto;
@@ -21,7 +22,6 @@ public class FlightsSearchService {
     private final BookingRapidApiClient bookingRapidApiClient;
 
     private final Map<String, String> locationIdCache = new ConcurrentHashMap<>();
-    private final Map<String, List<FlightOfferDto>> flightsCache = new ConcurrentHashMap<>();
 
     public FlightsSearchService(BookingRapidApiClient bookingRapidApiClient) {
         this.bookingRapidApiClient = bookingRapidApiClient;
@@ -43,6 +43,11 @@ public class FlightsSearchService {
         locationIdCache.put("BEG", "BEG.AIRPORT");
     }
 
+    @Cacheable(
+            cacheNames = "flight-search",
+            key = "#root.target.flightSearchCacheKey(#origin, #destination, #from, #to, #adults)",
+            unless = "#result == null || #result.isEmpty()"
+    )
     public List<FlightOfferDto> search(String origin, String destination, String from, String to, int adults) {
         String originCode = normalizeCode(origin);
         String destinationCode = normalizeCode(destination);
@@ -61,11 +66,6 @@ public class FlightsSearchService {
         }
 
         int safeAdults = Math.max(1, adults);
-
-        String cacheKey = originCode + "|" + destinationCode + "|" + departDate + "|" + returnDate + "|" + safeAdults;
-        if (flightsCache.containsKey(cacheKey)) {
-            return flightsCache.get(cacheKey);
-        }
 
         String fromId = resolveLocationId(originCode);
         String toId = resolveLocationId(destinationCode);
@@ -90,11 +90,14 @@ public class FlightsSearchService {
                 .sorted(Comparator.comparingDouble(FlightOfferDto::totalPrice))
                 .limit(MAX_RESULTS)
                 .toList();
-
-        flightsCache.put(cacheKey, results);
         return results;
     }
 
+    @Cacheable(
+            cacheNames = "flight-destinations",
+            key = "#root.target.destinationCacheKey(#query)",
+            unless = "#result == null || #result.isEmpty()"
+    )
     public List<FlightDestinationDto> searchDestinations(String query) {
         if (isBlank(query)) return List.of();
 
@@ -104,6 +107,11 @@ public class FlightsSearchService {
         return mapDestinations(raw);
     }
 
+    @Cacheable(
+            cacheNames = "flight-details",
+            key = "#root.target.destinationCacheKey(#token)",
+            unless = "#result == null"
+    )
     public FlightDetailsDto getFlightDetails(String token) {
         if (isBlank(token)) {
             return null;
@@ -115,6 +123,40 @@ public class FlightsSearchService {
         }
 
         return mapFlightDetails(raw);
+    }
+
+    public String flightSearchCacheKey(String origin, String destination, String from, String to, int adults) {
+        String originCode = normalizeCode(origin);
+        String destinationCode = normalizeCode(destination);
+
+        LocalDate departDate = parseDateOrTomorrow(from);
+        if (departDate.isBefore(LocalDate.now())) {
+            departDate = LocalDate.now().plusDays(1);
+        }
+
+        LocalDate returnDate = null;
+        if (to != null && !to.isBlank()) {
+            returnDate = parseDateOrNull(to);
+            if (returnDate != null && !returnDate.isAfter(departDate)) {
+                returnDate = departDate.plusDays(1);
+            }
+        }
+
+        return String.join("|",
+                normalizeCachePart(originCode),
+                normalizeCachePart(destinationCode),
+                departDate.toString(),
+                returnDate != null ? returnDate.toString() : "",
+                String.valueOf(Math.max(1, adults))
+        );
+    }
+
+    public String destinationCacheKey(String value) {
+        return normalizeCachePart(value);
+    }
+
+    public String normalizeCachePart(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
     @SuppressWarnings("unchecked")

@@ -1,6 +1,7 @@
 package tripmindai.com.mk.maintripservice.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import tripmindai.com.mk.maintripservice.model.Role;
 import tripmindai.com.mk.maintripservice.model.User;
 
 import java.util.Optional;
@@ -16,4 +17,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmailIgnoreCase(String email);
 
     Optional<User> findByPasswordResetTokenHash(String passwordResetTokenHash);
+
+    long countByRole(Role role);
+
+    long countByEmailVerifiedTrue();
+
+    long countByTwoFactorEnabledTrue();
+
+    long countByRoleAndEmailVerifiedTrue(Role role);
+
+    long countByRoleAndTwoFactorEnabledTrue(Role role);
 }

@@ -9,7 +9,6 @@ import org.springframework.stereotype.Service;
 import tripmindai.com.mk.maintripservice.model.User;
 
 import javax.crypto.SecretKey;
-import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 @Service
@@ -19,10 +18,10 @@ public class JwtService {
     private final long expirationMs;
 
     public JwtService(
-            @Value("${app.jwt.secret}") String secret,
             @Value("${app.jwt.expiration-ms}") long expirationMs
     ) {
-        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        // Startup-only signing key: a backend restart invalidates every existing JWT.
+        this.key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
         this.expirationMs = expirationMs;
     }
 

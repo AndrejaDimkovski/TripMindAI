@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { apiGet, API_BASE } from "../api/http";
 import {
     createCountryAdmin,
@@ -173,6 +174,7 @@ function PreviewImage({ src, alt, className = "" }) {
 }
 
 export default function AdminDashboardPage() {
+    const navigate = useNavigate();
     const [countries, setCountries] = useState([]);
     const [loading, setLoading] = useState(false);
     const [msg, setMsg] = useState("");
@@ -181,7 +183,7 @@ export default function AdminDashboardPage() {
     const [countryForm, setCountryForm] = useState({
         code: "",
         name: "",
-        image: null,
+        currencyCode: "EUR",
     });
 
     const [editingCountryId, setEditingCountryId] = useState(null);
@@ -197,6 +199,7 @@ export default function AdminDashboardPage() {
     });
 
     const [editingDestinationId, setEditingDestinationId] = useState(null);
+    const [selectedCountryFilter, setSelectedCountryFilter] = useState("");
 
     async function loadData() {
         setLoading(true);
@@ -225,6 +228,12 @@ export default function AdminDashboardPage() {
         );
     }, [countries]);
 
+    const filteredDestinations = useMemo(() => {
+        if (!selectedCountryFilter) return allDestinations;
+
+        return allDestinations.filter((d) => d.countryCodeResolved === selectedCountryFilter);
+    }, [allDestinations, selectedCountryFilter]);
+
     async function handleCountrySubmit(e) {
         e.preventDefault();
         setErr("");
@@ -243,7 +252,7 @@ export default function AdminDashboardPage() {
                 setMsg("Country created.");
             }
 
-            setCountryForm({ code: "", name: "", image: null });
+            setCountryForm({ code: "", name: "", currencyCode: "EUR" });
             setEditingCountryId(null);
             await loadData();
         } catch (e2) {
@@ -256,7 +265,7 @@ export default function AdminDashboardPage() {
         setCountryForm({
             code: c.code || "",
             name: c.name || "",
-            image: null,
+            currencyCode: c.currencyCode || "EUR",
         });
         window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -361,13 +370,16 @@ export default function AdminDashboardPage() {
 
                             <p className="mt-4 max-w-2xl text-sm leading-7 text-white/80 md:text-base">
                                 Create, update and organize the geographic content shown in your
-                                TravelMindAI experience. Keep countries and destinations structured,
+                                TripMindAI experience. Keep countries and destinations structured,
                                 visual and ready for discovery.
                             </p>
 
                             <div className="mt-8 flex flex-wrap gap-3">
                                 <HeroButton onClick={loadData} disabled={loading}>
                                     {loading ? "Refreshing..." : "Refresh data"}
+                                </HeroButton>
+                                <HeroButton onClick={() => navigate("/admin/analytics")}>
+                                    View analytics
                                 </HeroButton>
                             </div>
                         </div>
@@ -429,15 +441,16 @@ export default function AdminDashboardPage() {
                                     />
 
                                     <Input
-                                        label="Image"
-                                        type="file"
-                                        accept="image/*"
+                                        label="Currency"
+                                        value={countryForm.currencyCode}
                                         onChange={(e) =>
                                             setCountryForm((p) => ({
                                                 ...p,
-                                                image: e.target.files?.[0] || null,
+                                                currencyCode: e.target.value.toUpperCase(),
                                             }))
                                         }
+                                        placeholder="EUR"
+                                        maxLength={3}
                                     />
 
                                     <div className="flex flex-wrap gap-3">
@@ -451,7 +464,7 @@ export default function AdminDashboardPage() {
                                                 type="button"
                                                 onClick={() => {
                                                     setEditingCountryId(null);
-                                                    setCountryForm({ code: "", name: "", image: null });
+                                                    setCountryForm({ code: "", name: "", currencyCode: "EUR" });
                                                 }}
                                             >
                                                 Cancel
@@ -597,22 +610,22 @@ export default function AdminDashboardPage() {
                                     <div className="grid gap-4 md:grid-cols-2">
                                         {countries.map((c) => (
                                             <div
-                                                className="overflow-hidden rounded-[28px] border border-white/10 bg-white/10"
+                                                className="rounded-[28px] border border-white/10 bg-white/10 p-5"
                                                 key={c.code}
                                             >
-                                                <PreviewImage
-                                                    src={c.imageUrl ? imgUrl(c.imageUrl) : ""}
-                                                    alt={c.name}
-                                                    className="h-48 w-full object-cover"
-                                                />
-
-                                                <div className="p-5 text-white">
-                                                    <div className="flex items-start justify-between gap-3">
-                                                        <div>
-                                                            <h3 className="text-lg font-bold text-white">{displayValue(c.name, "Country")}</h3>
-                                                            <div className="mt-1 text-sm text-white/60">Code: {displayValue(c.code)}</div>
-                                                            <div className="mt-1 text-sm text-white/60">
-                                                                Destinations: {(c.destinations || []).length}
+                                                <div className="text-white">
+                                                    <div className="flex items-start justify-between gap-4">
+                                                        <div className="flex items-start gap-3">
+                                                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-sm font-black text-white">
+                                                                {displayValue(c.code, "CO")}
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-lg font-bold text-white">{displayValue(c.name, "Country")}</h3>
+                                                                <div className="mt-1 text-sm text-white/60">Code: {displayValue(c.code)}</div>
+                                                                <div className="mt-1 text-sm text-white/60">Currency: {displayValue(c.currencyCode, "EUR")}</div>
+                                                                <div className="mt-1 text-sm text-white/60">
+                                                                    Destinations: {(c.destinations || []).length}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                         <Badge tone="green">Country</Badge>
@@ -643,10 +656,27 @@ export default function AdminDashboardPage() {
                                 )}
                             </GlassSection>
 
-                            <GlassSection title="Destinations" subtitle={`${allDestinations.length} destination records`}>
-                                {allDestinations.length ? (
+                            <GlassSection
+                                title="Destinations"
+                                subtitle={`${filteredDestinations.length} of ${allDestinations.length} destination records`}
+                                action={
+                                    <select
+                                        value={selectedCountryFilter}
+                                        onChange={(e) => setSelectedCountryFilter(e.target.value)}
+                                        className="min-w-[220px] rounded-2xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white outline-none transition focus:border-white/30 focus:bg-white/15"
+                                    >
+                                        <option className="text-slate-900" value="">All countries</option>
+                                        {countries.map((c) => (
+                                            <option className="text-slate-900" key={c.code} value={c.code}>
+                                                {c.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                }
+                            >
+                                {filteredDestinations.length ? (
                                     <div className="space-y-4">
-                                        {allDestinations.map((d) => (
+                                        {filteredDestinations.map((d) => (
                                             <div
                                                 className="overflow-hidden rounded-[28px] border border-white/10 bg-white/10"
                                                 key={d.id || `${d.countryCode}-${d.cityCode}`}
@@ -700,7 +730,11 @@ export default function AdminDashboardPage() {
                                         ))}
                                     </div>
                                 ) : (
-                                    <div className="text-sm text-white/65">No destinations yet.</div>
+                                    <div className="text-sm text-white/65">
+                                        {selectedCountryFilter
+                                            ? "No destinations for the selected country."
+                                            : "No destinations yet."}
+                                    </div>
                                 )}
                             </GlassSection>
                         </div>

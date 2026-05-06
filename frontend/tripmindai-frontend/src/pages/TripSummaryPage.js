@@ -270,7 +270,7 @@ function PriceHighlight({ label, value, subtext }) {
     );
 }
 
-export default function BookingSummaryPage() {
+export default function TripSummaryPage() {
     const nav = useNavigate();
 
     const [flow, setFlow] = useState(null);

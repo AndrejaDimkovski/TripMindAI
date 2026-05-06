@@ -214,12 +214,6 @@ export default function LoginPage() {
                                                 <label className="mb-2 block text-sm font-medium text-white/85">
                                                     Password
                                                 </label>
-                                                <Link
-                                                    to="/forgot-password"
-                                                    className="text-sm font-semibold text-white/80 transition hover:text-white"
-                                                >
-                                                    Forgot password?
-                                                </Link>
                                                 <div className="flex overflow-hidden rounded-2xl border border-white/15 bg-white/10 transition focus-within:border-white/35 focus-within:bg-white/15">
                                                     <input
                                                         type={showPw ? "text" : "password"}
@@ -237,6 +231,12 @@ export default function LoginPage() {
                                                         {showPw ? "Hide" : "Show"}
                                                     </button>
                                                 </div>
+                                                <Link
+                                                    to="/forgot-password"
+                                                    className="text-sm font-semibold text-white/80 transition hover:text-white"
+                                                >
+                                                    Forgot password?
+                                                </Link>
                                             </div>
 
                                             <button

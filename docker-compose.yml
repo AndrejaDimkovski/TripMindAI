@@ -14,6 +14,22 @@ services:
     networks:
       - tripmindai-network
 
+  minio:
+    image: minio/minio:latest
+    container_name: tripmindai-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - tripmindai_minio_data:/data
+    networks:
+      - tripmindai-network
+
   main-trip-service:
     build:
       context: ./services/main-trip-service
@@ -21,6 +37,7 @@ services:
     restart: unless-stopped
     depends_on:
       - postgres
+      - minio
       - flights-service
       - hotels-service
     environment:
@@ -46,6 +63,11 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       FRONTEND_BASE_URL: ${FRONTEND_BASE_URL}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
     ports:
       - "8080:8080"
     networks:
@@ -101,6 +123,7 @@ services:
 
 volumes:
   tripmindai_postgres_data:
+  tripmindai_minio_data:
 
 networks:
   tripmindai-network:

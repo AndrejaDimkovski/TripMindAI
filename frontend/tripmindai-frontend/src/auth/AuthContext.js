@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { logoutUser, me as meApi, storeAuthToken } from "../api/authApi";
 import { clearToken, getToken } from "../api/http";
 
@@ -8,7 +8,7 @@ export function AuthProvider({ children }) {
     const [loading, setLoading] = useState(true);
     const [user, setUser] = useState(null);
 
-    async function refresh(silent = false) {
+    const refresh = useCallback(async function refresh(silent = false) {
         if (!silent) {
             setLoading(true);
         }
@@ -35,9 +35,9 @@ export function AuthProvider({ children }) {
                 setLoading(false);
             }
         }
-    }
+    }, []);
 
-    function loginWithToken(token, userPayload = null) {
+    const loginWithToken = useCallback(function loginWithToken(token, userPayload = null) {
         storeAuthToken(token);
 
         if (userPayload && userPayload.email) {
@@ -46,9 +46,9 @@ export function AuthProvider({ children }) {
         }
 
         refresh(true);
-    }
+    }, [refresh]);
 
-    async function logout() {
+    const logout = useCallback(async function logout() {
         try {
             await logoutUser();
         } catch {
@@ -56,10 +56,19 @@ export function AuthProvider({ children }) {
 
         clearToken();
         setUser(null);
-    }
+    }, []);
 
     useEffect(() => {
         refresh();
+    }, [refresh]);
+
+    useEffect(() => {
+        function handleAuthCleared() {
+            setUser(null);
+        }
+
+        window.addEventListener("tm_auth_cleared", handleAuthCleared);
+        return () => window.removeEventListener("tm_auth_cleared", handleAuthCleared);
     }, []);
 
     const value = useMemo(
@@ -73,7 +82,7 @@ export function AuthProvider({ children }) {
             loginWithToken,
             logout,
         }),
-        [loading, user]
+        [loading, user, refresh, loginWithToken, logout]
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

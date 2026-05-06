@@ -6,7 +6,7 @@ function safeStr(v) {
     return v == null || v === "" ? null : String(v);
 }
 
-function displayValue(value, fallback = "—") {
+function displayValue(value, fallback = "N/A") {
     if (value == null) return fallback;
     if (typeof value === "string" && value.trim() === "") return fallback;
     return value;
@@ -21,11 +21,26 @@ function buildGoogleMapsUrl({ name, lat, lng }) {
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 }
 
-function buildBookingUrl({ query, from, to, adults = 2, rooms = 1 }) {
+function buildExternalHotelQuery({ name, address, destinationName, countryName }) {
+    return [name, address, destinationName, countryName]
+        .map((part) => safeStr(part))
+        .filter((part) => part && part !== "N/A")
+        .join(", ");
+}
+
+function buildBookingUrl({ query, hotelId, from, to, adults = 2, rooms = 1, currency }) {
     const params = new URLSearchParams();
     params.set("ss", query || "");
     params.set("group_adults", String(adults));
     params.set("no_rooms", String(rooms));
+
+    if (hotelId) {
+        params.set("highlighted_hotels", String(hotelId));
+    }
+
+    if (currency) {
+        params.set("selected_currency", currency);
+    }
 
     const d1 = from ? new Date(from) : null;
     const d2 = to ? new Date(to) : null;
@@ -71,7 +86,7 @@ function formatMoney(v) {
 }
 
 function formatDateDisplay(value) {
-    if (!value) return "—";
+    if (!value) return "N/A";
     if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) {
         const [yyyy, mm, dd] = String(value).split("-");
         return `${dd}.${mm}.${yyyy}`;
@@ -312,11 +327,11 @@ function CheapestOfferCard({
             <div className={`mt-4 grid gap-3 ${derivedBoardType || derivedPaymentPolicy || mealplanText ? "md:grid-cols-2" : ""}`}>
                 <InfoTile
                     label="Stay"
-                    value={`${formatDateDisplay(offer?.checkInDate || bookingFrom)} → ${formatDateDisplay(offer?.checkOutDate || bookingTo)}`}
+                    value={`${formatDateDisplay(offer?.checkInDate || bookingFrom)} to ${formatDateDisplay(offer?.checkOutDate || bookingTo)}`}
                 />
                 <InfoTile
                     label="Guests / Nights"
-                    value={`${offer?.adults || adults} guests${(offer?.nights || nights) ? ` · ${offer?.nights || nights} nights` : ""}`}
+                    value={`${offer?.adults || adults} guests${(offer?.nights || nights) ? ` / ${offer?.nights || nights} nights` : ""}`}
                 />
                 <InfoTile label="Room quantity" value={offer?.roomQuantity || 1} />
                 {derivedBoardType ? <InfoTile label="Board type" value={derivedBoardType} /> : null}
@@ -347,7 +362,7 @@ function RoomCard({ room, derivedBoardType, derivedPaymentPolicy, mealplanText }
                 {room?.bedType ? <Badge tone="light">{room.bedType}</Badge> : null}
                 {room?.roomSize != null ? (
                     <Badge tone="green">
-                        {room.roomSize} {room.roomSizeUnit || "m²"}
+                        {room.roomSize} {room.roomSizeUnit || "m2"}
                     </Badge>
                 ) : null}
                 {derivedBoardType ? <Badge tone="light">Board: {derivedBoardType}</Badge> : null}
@@ -498,8 +513,12 @@ export default function HotelDetailsPage() {
         [stateHotel, basic]
     );
 
-    const bestAddress = safeStr(basic?.address) || "—";
-    const bestRating = basic?.rating ?? stateHotel?.reviewScore ?? "—";
+    const bestAddress = safeStr(basic?.address) || "N/A";
+    const positiveRating = Number(basic?.rating) > 0 ? basic.rating : null;
+    const positiveReviewScore = Number(basic?.reviewScore || stateHotel?.reviewScore) > 0
+        ? (basic?.reviewScore || stateHotel?.reviewScore)
+        : null;
+    const bestRating = positiveRating || positiveReviewScore || "N/A";
     const lat = basic?.latitude ?? stateHotel?.latitude ?? null;
     const lng = basic?.longitude ?? stateHotel?.longitude ?? null;
     const desc =
@@ -527,42 +546,49 @@ export default function HotelDetailsPage() {
     const displayCurrency =
         primaryOffer?.convertedCurrency || primaryOffer?.currency || stateSearch?.targetCurrency || "EUR";
 
-    const bookingQuery = `${hotelName} ${stateSearch?.destinationName || ""}`.trim();
+    const externalHotelQuery = buildExternalHotelQuery({
+        name: hotelName,
+        address: bestAddress,
+        destinationName: stateSearch?.destinationName,
+        countryName: stateSearch?.countryName,
+    });
 
     const bookingUrl = useMemo(
         () =>
             buildBookingUrl({
-                query: bookingQuery,
+                query: externalHotelQuery,
+                hotelId,
                 from: bookingFrom,
                 to: bookingTo,
                 adults,
                 rooms: roomCount,
+                currency: displayCurrency,
             }),
-        [bookingQuery, bookingFrom, bookingTo, adults, roomCount]
+        [externalHotelQuery, hotelId, bookingFrom, bookingTo, adults, roomCount, displayCurrency]
     );
 
     const expediaUrl = useMemo(
         () =>
             buildExpediaUrl({
-                query: bookingQuery,
+                query: externalHotelQuery,
                 from: bookingFrom,
                 to: bookingTo,
                 adults,
                 rooms: roomCount,
             }),
-        [bookingQuery, bookingFrom, bookingTo, adults, roomCount]
+        [externalHotelQuery, bookingFrom, bookingTo, adults, roomCount]
     );
 
     const hotelsUrl = useMemo(
         () =>
             buildHotelsDotComUrl({
-                query: bookingQuery,
+                query: externalHotelQuery,
                 from: bookingFrom,
                 to: bookingTo,
                 adults,
                 rooms: roomCount,
             }),
-        [bookingQuery, bookingFrom, bookingTo, adults, roomCount]
+        [externalHotelQuery, bookingFrom, bookingTo, adults, roomCount]
     );
 
     const mapsUrl = useMemo(
@@ -645,23 +671,23 @@ export default function HotelDetailsPage() {
                 <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(6,13,20,0.95)_0%,rgba(8,18,28,0.84)_34%,rgba(8,18,28,0.56)_70%,rgba(8,18,28,0.42)_100%)]" />
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.14),transparent_28%)]" />
 
-                <div className="relative z-10 mx-auto max-w-[1500px] px-4 pb-16 pt-24 lg:px-6">
-                    <div className="grid items-start gap-8 xl:grid-cols-[1.18fr_0.82fr]">
-                        <div className="pt-6 lg:pt-8">
+                <div className="relative z-10 mx-auto max-w-[1500px] px-4 pb-10 pt-20 lg:px-6">
+                    <div className="grid items-start gap-6 xl:grid-cols-[1.18fr_0.82fr]">
+                        <div className="pt-4 lg:pt-5">
                             <HeroPill>Hotel Details</HeroPill>
 
-                            <h1 className="mt-6 max-w-3xl text-4xl font-extrabold leading-[1.08] text-white md:text-5xl xl:text-[3.6rem]">
+                            <h1 className="mt-4 max-w-3xl text-4xl font-extrabold leading-[1.05] text-white md:text-5xl xl:text-[3.25rem]">
                                 {hotelName}
                             </h1>
 
-                            <p className="mt-4 max-w-2xl text-sm leading-7 text-white/80 md:text-base">
+                            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/80 md:text-base">
                                 Explore hotel information, policies, facilities, and the cheapest matching room for{" "}
                                 {stateSearch?.destinationName || "your selected destination"}.
                             </p>
 
-                            <div className="mt-6 flex flex-wrap gap-2">
+                            <div className="mt-4 flex flex-wrap gap-2">
                                 <Badge tone="light">{stateSearch?.destinationName || "Destination"}</Badge>
-                                {bestRating !== "—" ? <Badge tone="yellow">⭐ {bestRating}</Badge> : null}
+                                {bestRating !== "N/A" ? <Badge tone="yellow">Rating: {bestRating}</Badge> : null}
                                 {displayCurrency ? <Badge tone="light">{displayCurrency}</Badge> : null}
                                 {descriptionInfo?.accommodationType ? (
                                     <Badge tone="blue">{descriptionInfo.accommodationType}</Badge>
@@ -670,22 +696,22 @@ export default function HotelDetailsPage() {
                                 {derivedPaymentPolicy ? <Badge tone="yellow">{derivedPaymentPolicy}</Badge> : null}
                             </div>
 
-                            <div className="mt-8 flex flex-wrap gap-3">
-                                <HeroButton onClick={back}>← Back</HeroButton>
+                            <div className="mt-5 flex flex-wrap gap-3">
+                                <HeroButton onClick={back}>Back</HeroButton>
                                 <HeroButton primary onClick={() => openExternal(bookingUrl)}>
                                     Open on Booking.com
                                 </HeroButton>
                             </div>
 
-                            <div className="mt-8">
+                            <div className="mt-5">
                                 {hotelPhotos.length > 0 ? (
-                                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                                         {hotelPhotos.slice(0, 6).map((img, i) => (
                                             <div key={i} className="overflow-hidden rounded-2xl border border-white/10 bg-white/10">
                                                 <img
                                                     src={img}
                                                     alt={`Hotel ${i + 1}`}
-                                                    className="h-52 w-full object-cover"
+                                                    className="h-40 w-full object-cover"
                                                     loading="lazy"
                                                 />
                                             </div>
@@ -696,7 +722,7 @@ export default function HotelDetailsPage() {
                                         <img
                                             src={stateHotel.photoUrl}
                                             alt={hotelName}
-                                            className="h-64 w-full object-cover"
+                                            className="h-44 w-full object-cover"
                                             loading="lazy"
                                         />
                                     </div>
@@ -717,11 +743,11 @@ export default function HotelDetailsPage() {
                                     <InfoTile label="Address" value={bestAddress} />
                                     <InfoTile
                                         label="Dates"
-                                        value={`${formatDateDisplay(bookingFrom)} → ${formatDateDisplay(bookingTo)}`}
+                                        value={`${formatDateDisplay(bookingFrom)} to ${formatDateDisplay(bookingTo)}`}
                                     />
                                     <InfoTile label="Guests" value={adults} />
                                     <InfoTile label="Rooms" value={roomCount} />
-                                    <InfoTile label="Nights" value={nights || "—"} />
+                                    <InfoTile label="Nights" value={nights || "N/A"} />
                                     {derivedBoardType ? <InfoTile label="Board type" value={derivedBoardType} /> : null}
                                     {derivedPaymentPolicy ? <InfoTile label="Payment policy" value={derivedPaymentPolicy} /> : null}
                                 </div>
@@ -756,7 +782,7 @@ export default function HotelDetailsPage() {
 
                     {error ? (
                         <div className="mt-8 rounded-2xl border border-rose-300/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100 backdrop-blur">
-                            ⚠️ {error}
+                            {error}
                         </div>
                     ) : null}
 
@@ -769,8 +795,8 @@ export default function HotelDetailsPage() {
                     ) : null}
 
                     {!loading ? (
-                        <div className="mt-8 grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
-                            <div className="space-y-6">
+                        <div className="mt-6 grid gap-5 xl:grid-cols-[1.02fr_0.98fr]">
+                            <div className="space-y-5">
                                 <GlassSection title="About this hotel" subtitle="Description and key information">
                                     <p className="text-sm leading-8 text-white/80">{desc}</p>
 
@@ -892,21 +918,21 @@ export default function HotelDetailsPage() {
                                                 label="Check-in"
                                                 value={
                                                     policies
-                                                        ? `${policies.checkInFrom || "—"} → ${policies.checkInUntil || "—"}`
-                                                        : "—"
+                                                        ? `${policies.checkInFrom || "N/A"} to ${policies.checkInUntil || "N/A"}`
+                                                        : "N/A"
                                                 }
                                             />
                                             <InfoTile
                                                 label="Check-out"
                                                 value={
                                                     policies
-                                                        ? `${policies.checkOutFrom || "—"} → ${policies.checkOutUntil || "—"}`
-                                                        : "—"
+                                                        ? `${policies.checkOutFrom || "N/A"} to ${policies.checkOutUntil || "N/A"}`
+                                                        : "N/A"
                                                 }
                                             />
-                                            <InfoTile label="Cancellation" value={policies?.cancellationPolicy || primaryBlock?.paymentterms?.cancellation?.description || "—"} />
-                                            <InfoTile label="Children" value={policies?.childPolicy || "—"} />
-                                            <InfoTile label="Pets" value={policies?.petPolicy || "—"} />
+                                            <InfoTile label="Cancellation" value={policies?.cancellationPolicy || primaryBlock?.paymentterms?.cancellation?.description || "N/A"} />
+                                            <InfoTile label="Children" value={policies?.childPolicy || "N/A"} />
+                                            <InfoTile label="Pets" value={policies?.petPolicy || "N/A"} />
                                         </div>
                                     </GlassSection>
 
@@ -919,7 +945,7 @@ export default function HotelDetailsPage() {
                                                 label="Pay at property"
                                                 value={
                                                     paymentFeatures?.payAtProperty == null
-                                                        ? "—"
+                                                        ? "N/A"
                                                         : paymentFeatures.payAtProperty
                                                             ? "Yes"
                                                             : "No"
@@ -1015,30 +1041,6 @@ export default function HotelDetailsPage() {
                                         </div>
                                     </GlassSection>
 
-                                    <GlassSection title="Trip summary" subtitle="Current hotel search configuration">
-                                        <div className="space-y-3">
-                                            <InfoTile label="Destination" value={stateSearch?.destinationName || "—"} />
-                                            <InfoTile
-                                                label="Dates"
-                                                value={`${formatDateDisplay(bookingFrom)} → ${formatDateDisplay(bookingTo)}`}
-                                            />
-                                            <InfoTile label="Guests" value={adults} />
-                                            <InfoTile label="Rooms" value={roomCount} />
-                                            <InfoTile label="Nights" value={nights || "—"} />
-                                            <InfoTile label="Currency" value={displayCurrency} />
-                                        </div>
-
-                                        {primaryOffer ? (
-                                            <div className="mt-4 rounded-2xl border border-emerald-300/20 bg-emerald-500/20 p-4">
-                                                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">
-                                                    Current best price
-                                                </div>
-                                                <div className="mt-2 text-2xl font-bold text-white">
-                                                    {totalText(primaryOffer)}
-                                                </div>
-                                            </div>
-                                        ) : null}
-                                    </GlassSection>
                                 </div>
                             </aside>
                         </div>

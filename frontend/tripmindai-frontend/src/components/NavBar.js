@@ -89,11 +89,6 @@ export default function NavBar() {
                                 Profile
                             </Link>
 
-                            {isAdmin && (
-                                <Link to="/admin" className={desktopLinkClass("/admin")}>
-                                    Admin
-                                </Link>
-                            )}
                         </div>
                     )}
 
@@ -120,6 +115,35 @@ export default function NavBar() {
                             </>
                         ) : (
                             <>
+                                {isAdmin && (
+                                    <>
+                                        <Link
+                                            to="/admin"
+                                            className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+                                                loc.pathname === "/admin"
+                                                    ? "bg-emerald-500 text-white"
+                                                    : isDiscover
+                                                        ? "border border-white/20 text-white hover:bg-white/10"
+                                                        : "border border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                            }`}
+                                        >
+                                            Admin
+                                        </Link>
+                                        <Link
+                                            to="/admin/analytics"
+                                            className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+                                                loc.pathname === "/admin/analytics"
+                                                    ? "bg-[#2b5da8] text-white"
+                                                    : isDiscover
+                                                        ? "border border-white/20 text-white hover:bg-white/10"
+                                                        : "border border-blue-200 text-blue-700 hover:bg-blue-50"
+                                            }`}
+                                        >
+                                            Analytics
+                                        </Link>
+                                    </>
+                                )}
+
                                 <span
                                     className={`px-4 py-2 rounded-xl text-sm ${
                                         isDiscover
@@ -178,9 +202,14 @@ export default function NavBar() {
                                 </Link>
 
                                 {isAdmin && (
-                                    <Link to="/admin" className={mobileLinkClass("/admin")}>
-                                        Admin
-                                    </Link>
+                                    <>
+                                        <Link to="/admin" className={mobileLinkClass("/admin")}>
+                                            Admin
+                                        </Link>
+                                        <Link to="/admin/analytics" className={mobileLinkClass("/admin/analytics")}>
+                                            Analytics
+                                        </Link>
+                                    </>
                                 )}
                             </>
                         )}

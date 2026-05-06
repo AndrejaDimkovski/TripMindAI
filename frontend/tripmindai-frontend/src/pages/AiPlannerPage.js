@@ -4,9 +4,55 @@ import { apiGet } from "../api";
 import { recommendTripAi } from "../api/aiApi";
 import { searchTrip } from "../api/tripsApi";
 import AiPromptComposer from "../components/AiPromptComposer";
-import AiPreviewCard from "../components/AiPreviewCard";
 
 const FLOW_STORAGE_KEY = "tm_flow_v1";
+const AI_PROMPT_MAX_LENGTH = 600;
+
+const AI_TRAVEL_TERMS = [
+    "travel",
+    "trip",
+    "vacation",
+    "holiday",
+    "visit",
+    "go",
+    "fly",
+    "flight",
+    "hotel",
+    "stay",
+    "destination",
+    "from",
+    "to",
+    "days",
+    "nights",
+    "budget",
+    "patuvanje",
+    "odmor",
+    "let",
+    "avion",
+    "destinacija",
+    "grad",
+    "drzava",
+    "dena",
+    "nokji",
+    "budzet",
+];
+
+const AI_BLOCKED_TERMS = [
+    "hack",
+    "malware",
+    "exploit",
+    "sql injection",
+    "xss",
+    "password",
+    "bomb",
+    "weapon",
+    "drugs",
+    "porn",
+    "sex",
+    "kill",
+    "suicide",
+    "self harm",
+];
 
 function readFlowState() {
     try {
@@ -21,6 +67,34 @@ function saveFlowState(nextState) {
     try {
         sessionStorage.setItem(FLOW_STORAGE_KEY, JSON.stringify(nextState));
     } catch {}
+}
+
+function validateAiPrompt(prompt) {
+    const text = String(prompt || "").trim();
+    const normalized = text.toLowerCase();
+
+    if (text.length < 10) {
+        return "Write a travel request with destination, dates, people or budget.";
+    }
+
+    if (text.length > AI_PROMPT_MAX_LENGTH) {
+        return `Prompt is too long. Please keep it under ${AI_PROMPT_MAX_LENGTH} characters.`;
+    }
+
+    if (AI_BLOCKED_TERMS.some((term) => normalized.includes(term))) {
+        return "AI planner can only be used for safe travel planning requests.";
+    }
+
+    const hasTravelIntent = AI_TRAVEL_TERMS.some((term) => normalized.includes(term));
+    const hasDateOrDuration =
+        /\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b/.test(normalized) ||
+        /\b\d+\s*(day|days|night|nights|den|dena|nok|nokji)\b/.test(normalized);
+
+    if (!hasTravelIntent && !hasDateOrDuration) {
+        return "AI planner can only help with travel planning requests.";
+    }
+
+    return "";
 }
 
 function normalizeDateToIso(value) {
@@ -43,15 +117,6 @@ function normalizeDateToIso(value) {
     }
 
     return "";
-}
-
-function formatDateDisplay(value) {
-    if (!value) return "—";
-    const iso = normalizeDateToIso(value);
-    if (!iso) return String(value);
-
-    const [yyyy, mm, dd] = iso.split("-");
-    return `${dd}.${mm}.${yyyy}`;
 }
 
 function isValidIsoDate(value) {
@@ -111,45 +176,6 @@ function mapAiBudgetToPriceRange(budgetLevel) {
     if (value === "high") return "HIGH";
 
     return "";
-}
-
-function getBudgetPresentation(level, currency = "EUR") {
-    const value = String(level || "").trim().toLowerCase();
-
-    switch (value) {
-        case "low":
-            return {
-                label: "Budget",
-                badgeTone: "green",
-                description: "Affordable stays and lower total trip cost.",
-                rangeText: `0 – 500 ${currency}`,
-            };
-        case "high":
-            return {
-                label: "Premium / Luxury",
-                badgeTone: "yellow",
-                description: "Higher-end hotels, comfort-first options and premium pricing.",
-                rangeText: `1200+ ${currency}`,
-            };
-        case "medium":
-        default:
-            return {
-                label: "Mid-range",
-                badgeTone: "blue",
-                description: "Balanced comfort and price for most trips.",
-                rangeText: `500 – 1200 ${currency}`,
-            };
-    }
-}
-
-function getBudgetPriceRangeText(priceRange, currency = "EUR") {
-    const value = String(priceRange || "").trim().toUpperCase();
-
-    if (value === "LOW") return `0 – 500 ${currency}`;
-    if (value === "MEDIUM") return `500 – 1200 ${currency}`;
-    if (value === "HIGH") return `1200+ ${currency}`;
-
-    return "Will be determined from prompt";
 }
 
 function validateDates(from, to) {
@@ -264,7 +290,7 @@ export default function AiPlannerPage() {
     const [tripMode, setTripMode] = useState("FLIGHT_HOTEL");
 
     const [aiLoading, setAiLoading] = useState(false);
-    const [aiPreviewLoading, setAiPreviewLoading] = useState(false);
+    const [, setAiPreviewLoading] = useState(false);
     const [error, setError] = useState("");
     const [aiError, setAiError] = useState("");
 
@@ -358,48 +384,9 @@ export default function AiPlannerPage() {
         }
     }
 
-    const detectedBudget = useMemo(() => {
-        return aiPreview?.budgetLevel || aiForm.budgetLevel || "medium";
-    }, [aiPreview, aiForm.budgetLevel]);
-
     const detectedPeople = useMemo(() => {
         return aiPreview?.extractedPeople ?? null;
     }, [aiPreview]);
-
-    const detectedDatesText = useMemo(() => {
-        if (aiPreview?.extractedFromDate || aiPreview?.extractedToDate) {
-            return `${formatDateDisplay(aiPreview?.extractedFromDate)}${
-                aiPreview?.extractedToDate ? ` → ${formatDateDisplay(aiPreview.extractedToDate)}` : ""
-            }`;
-        }
-
-        if (aiPreview?.extractedMonth) {
-            const duration = aiPreview?.extractedDurationDays ? ` · ${aiPreview.extractedDurationDays} days` : "";
-            return `${aiPreview.extractedMonth}${duration}`;
-        }
-
-        if (aiPreview?.extractedDurationDays) {
-            return `${aiPreview.extractedDurationDays} days`;
-        }
-
-        return "Will be detected from text";
-    }, [aiPreview]);
-
-    const livePromptState = useMemo(() => {
-        if (!aiForm.prompt?.trim()) return "Waiting for input";
-        if (aiPreviewLoading) return "Thinking...";
-        if (aiPreview) return "Ready";
-        if (aiForm.prompt.trim().length < 8) return "Typing...";
-        return "Analyzing...";
-    }, [aiForm.prompt, aiPreviewLoading, aiPreview]);
-
-    const budgetPreview = useMemo(() => {
-        return getBudgetPresentation(detectedBudget || aiForm.budgetLevel, searchForm?.targetCurrency || "EUR");
-    }, [detectedBudget, aiForm.budgetLevel, searchForm?.targetCurrency]);
-
-    const previewPriceRange = useMemo(() => {
-        return mapAiBudgetToPriceRange(detectedBudget || aiForm.budgetLevel);
-    }, [detectedBudget, aiForm.budgetLevel]);
 
     const selectedDestinationName =
         selectedDestination?.name ||
@@ -449,7 +436,7 @@ export default function AiPlannerPage() {
     function triggerAiPreview(promptValue) {
         const trimmed = String(promptValue || "").trim();
 
-        if (trimmed.length < 6) {
+        if (trimmed.length < 6 || validateAiPrompt(trimmed)) {
             setAiPreview(null);
             setAiPreviewLoading(false);
             return;
@@ -669,8 +656,9 @@ export default function AiPlannerPage() {
         clearPreviewState();
 
         try {
-            if (!aiForm.prompt || aiForm.prompt.trim().length < 8) {
-                throw new Error("Write at least 1-2 sentences about the trip you want.");
+            const promptMessage = validateAiPrompt(aiForm.prompt);
+            if (promptMessage) {
+                throw new Error(promptMessage);
             }
 
             const dateMessage = validateDates(aiForm.fromDate, aiForm.toDate);
@@ -755,14 +743,14 @@ export default function AiPlannerPage() {
 
                     <div className="grid w-full items-start gap-10 lg:grid-cols-[1.02fr_0.98fr]">
                         <div className="pt-6 lg:pt-10">
-                            <HeroPill>AI Travel Planner</HeroPill>
+                            <HeroPill>AI Trip Planner</HeroPill>
 
                             <h1 className="mt-8 text-6xl font-extrabold uppercase leading-none text-white md:text-7xl xl:text-[6.3rem]">
                                 Plan with AI
                             </h1>
 
                             <p className="mt-5 max-w-xl text-sm leading-7 text-white/85 md:text-base">
-                                Describe your ideal journey and let TravelMindAI detect destination, travel dates,
+                                Describe your ideal journey and let TripMindAI detect destination, trip dates,
                                 origin city, people and budget, then continue directly to{" "}
                                 {tripMode === "HOTEL_ONLY" ? "hotels" : "flights"}.
                             </p>
@@ -793,18 +781,15 @@ export default function AiPlannerPage() {
                             </div>
 
                             <div className="mt-5 flex flex-wrap gap-2">
+                                <Badge tone="white">
+                                    {originDisplayValue(aiPreview?.extractedOriginCity || aiPreview?.extractedOriginIata || searchForm.origin)}
+                                </Badge>
                                 <Badge tone="white">{selectedDestinationName}</Badge>
                                 <Badge tone="blue">{selectedCountryLabel}</Badge>
                                 {detectedPeople ? (
                                     <Badge tone="green">
                                         {detectedPeople} traveler{Number(detectedPeople) > 1 ? "s" : ""}
                                     </Badge>
-                                ) : null}
-                                <Badge tone="white">
-                                    From: {aiPreview?.extractedOriginIata || aiPreview?.extractedOriginCity || searchForm.origin}
-                                </Badge>
-                                {aiPreview?.confidence ? (
-                                    <Badge tone="yellow">{Math.round(aiPreview.confidence * 100)}% confidence</Badge>
                                 ) : null}
                             </div>
 
@@ -827,18 +812,8 @@ export default function AiPlannerPage() {
                             <AiPromptComposer
                                 value={aiForm.prompt}
                                 onChange={updatePrompt}
+                                maxLength={AI_PROMPT_MAX_LENGTH}
                                 autoFocus
-                            />
-
-                            <AiPreviewCard
-                                tripMode={tripMode}
-                                livePromptState={livePromptState}
-                                detectedDatesText={detectedDatesText}
-                                detectedPeople={detectedPeople}
-                                budgetPreview={budgetPreview}
-                                previewPriceRangeText={getBudgetPriceRangeText(previewPriceRange, searchForm?.targetCurrency || "EUR")}
-                                selectedDestinationName={selectedDestinationName}
-                                aiPreview={aiPreview}
                             />
 
                             {aiOptions.length > 1 ? (
@@ -875,54 +850,6 @@ export default function AiPlannerPage() {
                                     </div>
                                 </GlassCard>
                             ) : null}
-
-                            {aiPreview?.candidateDestinations?.length ? (
-                                <GlassCard className="p-6 bg-white/12 !border-white/15 !text-white backdrop-blur-xl">
-                                    <div className="mb-4 text-xl font-bold text-white">
-                                        Candidate destinations
-                                    </div>
-
-                                    <div className="flex flex-wrap gap-2">
-                                        {aiPreview.candidateDestinations.map((name) => (
-                                            <Badge key={name} tone="blue">
-                                                {name}
-                                            </Badge>
-                                        ))}
-                                    </div>
-                                </GlassCard>
-                            ) : null}
-
-                            {aiPreview?.candidateCountries?.length ? (
-                                <GlassCard className="p-6 bg-white/12 !border-white/15 !text-white backdrop-blur-xl">
-                                    <div className="mb-4 text-xl font-bold text-white">
-                                        Candidate countries
-                                    </div>
-
-                                    <div className="flex flex-wrap gap-2">
-                                        {aiPreview.candidateCountries.map((name) => (
-                                            <Badge key={name} tone="green">
-                                                {name}
-                                            </Badge>
-                                        ))}
-                                    </div>
-                                </GlassCard>
-                            ) : null}
-
-                            {aiSuggestedCodes.length > 0 && (
-                                <GlassCard className="p-6 bg-white/12 !border-white/15 !text-white backdrop-blur-xl">
-                                    <div className="mb-4 text-xl font-bold text-white">
-                                        Suggested destination codes
-                                    </div>
-
-                                    <div className="flex flex-wrap gap-2">
-                                        {aiSuggestedCodes.map((code) => (
-                                            <Badge key={code} tone="yellow">
-                                                {code}
-                                            </Badge>
-                                        ))}
-                                    </div>
-                                </GlassCard>
-                            )}
 
                             {loadingCountries ? (
                                 <div className="pb-10 text-sm text-white/65">

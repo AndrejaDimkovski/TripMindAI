@@ -14,6 +14,7 @@ export function setToken(token) {
 
 export function clearToken() {
     sessionStorage.removeItem(TOKEN_KEY);
+    window.dispatchEvent(new Event("tm_auth_cleared"));
 }
 
 export async function apiFetch(path, options = {}) {

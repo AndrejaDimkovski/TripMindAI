@@ -38,7 +38,7 @@ public class DestinationRecommendationService {
                                 || (interpretation.candidateDestinations() != null && !interpretation.candidateDestinations().isEmpty())
                 );
 
-        if (unsupportedRequestedPlace) {
+        if (unsupportedRequestedPlace && !hasSupportedCandidateDestination(interpretation)) {
             return List.of();
         }
 
@@ -117,6 +117,31 @@ public class DestinationRecommendationService {
                             }
                     );
         }
+    }
+
+    private boolean hasSupportedCandidateDestination(AiTripInterpretation interpretation) {
+        if (interpretation.extractedDestinationText() != null
+                && !interpretation.extractedDestinationText().isBlank()
+                && destinationRepository.findByNameIgnoreCase(interpretation.extractedDestinationText().trim()).isPresent()) {
+            return true;
+        }
+
+        if (interpretation.candidateDestinations() == null) {
+            return false;
+        }
+
+        for (String candidate : interpretation.candidateDestinations()) {
+            if (candidate == null || candidate.isBlank()) {
+                continue;
+            }
+
+            if (destinationRepository.findByNameIgnoreCase(candidate.trim()).isPresent()
+                    || !destinationRepository.findTop5ByNameContainingIgnoreCaseOrderByNameAsc(candidate.trim()).isEmpty()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void addFromSingleDestinationText(

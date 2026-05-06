@@ -203,7 +203,7 @@ public class HotelsSearchService {
                 str(readNested(data, "property", "chainCode"))
         );
 
-        Integer rating = firstInteger(
+        Integer rating = firstPositiveInteger(
                 integer(data.get("class")),
                 integer(data.get("star_rating")),
                 integer(data.get("hotel_class")),
@@ -1859,6 +1859,13 @@ public class HotelsSearchService {
     private Integer firstInteger(Integer... values) {
         for (Integer v : values) {
             if (v != null) return v;
+        }
+        return null;
+    }
+
+    private Integer firstPositiveInteger(Integer... values) {
+        for (Integer v : values) {
+            if (v != null && v > 0) return v;
         }
         return null;
     }

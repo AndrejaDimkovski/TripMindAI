@@ -11,9 +11,10 @@ import ManualPlannerPage from "./pages/ManualPlannerPage";
 import FlightResultsPage from "./pages/FlightResultsPage";
 import FlightDetailsPage from "./pages/FlightDetailsPage";
 import HotelResultsPage from "./pages/HotelResultsPage";
-import BookingSummaryPage from "./pages/BookingSummaryPage";
+import TripSummaryPage from "./pages/TripSummaryPage";
 import HotelDetailsPage from "./pages/HotelDetailsPage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
+import AdminAnalyticsPage from "./pages/AdminAnalyticsPage";
 import DestinationDetailsPage from "./pages/DestinationDetailsPage";
 import ProtectedRoute from "./auth/ProtectedRoute";
 import ProtectedAdminRoute from "./auth/ProtectedAdminRoute";
@@ -95,7 +96,7 @@ function App() {
                         path="/plan/summary"
                         element={
                             <ProtectedRoute>
-                                <BookingSummaryPage />
+                                <TripSummaryPage />
                             </ProtectedRoute>
                         }
                     />
@@ -156,6 +157,15 @@ function App() {
                         element={
                             <ProtectedAdminRoute>
                                 <AdminDashboardPage />
+                            </ProtectedAdminRoute>
+                        }
+                    />
+
+                    <Route
+                        path="/admin/analytics"
+                        element={
+                            <ProtectedAdminRoute>
+                                <AdminAnalyticsPage />
                             </ProtectedAdminRoute>
                         }
                     />

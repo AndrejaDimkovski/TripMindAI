@@ -387,11 +387,6 @@ export default function ManualPlannerPage() {
         return activeCountry?.destinations || [];
     }, [activeCountry]);
 
-    const resolvedOriginIata = useMemo(() => {
-        return resolveOriginToIata(searchForm.origin);
-    }, [searchForm.origin]);
-
-
     function handleTripModeChange(nextMode) {
         setTripMode(nextMode);
         const current = readFlowState() || {};
@@ -418,15 +413,15 @@ export default function ManualPlannerPage() {
         const toIso = normalizeDateToIso(to);
 
         if (!fromIso || !isValidIsoDate(fromIso)) {
-            return "From датум мора да биде во формат DD.MM.YYYY.";
+            return "From date must be in dd.mm.yyyy format.";
         }
 
         if (to && (!toIso || !isValidIsoDate(toIso))) {
-            return "To датум мора да биде во формат DD.MM.YYYY.";
+            return "To date must be in dd.mm.yyyy format.";
         }
 
         if (toIso && toIso < fromIso) {
-            return "To датум не смее да биде пред From.";
+            return "To date cannot be before From date.";
         }
 
         return "";
@@ -540,7 +535,7 @@ export default function ManualPlannerPage() {
 
     function normalizeSearchPayload() {
         if (!selectedDestination?.cityCode) {
-            throw new Error("Избери дестинација.");
+            throw new Error("Select a destination.");
         }
 
         const msg = validateDates(searchForm.from, searchForm.to);
@@ -614,6 +609,62 @@ export default function ManualPlannerPage() {
         }
     }
 
+    const selectedDestinationPreview = (
+        <GlassCard className="mt-6 max-w-2xl p-5 text-white">
+            {!selectedDestination ? (
+                <div className="flex items-center justify-between gap-4">
+                    <div>
+                        <div className="text-lg font-bold text-white">Quick preview</div>
+                        <div className="mt-1 text-sm text-white/70">
+                            Select a destination to see your trip summary here.
+                        </div>
+                    </div>
+                    <Badge tone="white">Waiting</Badge>
+                </div>
+            ) : (
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+                    <CardImage
+                        src={destinationImageUrl(selectedDestination)}
+                        alt={selectedDestination.name}
+                        className="h-32 w-full rounded-[22px] object-cover sm:w-44"
+                    />
+
+                    <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <div className="mr-auto text-xl font-bold text-white">
+                                {selectedDestination.name}
+                            </div>
+                            <Badge tone="green">{activeCountryName || "Country"}</Badge>
+                            <Badge tone="yellow">
+                                {tripMode === "HOTEL_ONLY" ? "Hotel only" : "Flight + Hotel"}
+                            </Badge>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                            <div className="rounded-2xl bg-white/10 px-4 py-3">
+                                <span className="text-white/55">Dates: </span>
+                                <span className="font-semibold text-white">
+                                    {searchForm.from
+                                        ? `${formatDateDisplay(searchForm.from)}${
+                                            searchForm.to ? ` to ${formatDateDisplay(searchForm.to)}` : ""
+                                        }`
+                                        : "Not selected"}
+                                </span>
+                            </div>
+
+                            <div className="rounded-2xl bg-white/10 px-4 py-3">
+                                <span className="text-white/55">Guests: </span>
+                                <span className="font-semibold text-white">
+                                    {searchForm.adults} / {searchForm.targetCurrency}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </GlassCard>
+    );
+
     return (
         <div className="min-h-screen bg-[#0b1620]">
             <section className="relative min-h-screen overflow-hidden">
@@ -624,13 +675,13 @@ export default function ManualPlannerPage() {
                 <div className="relative z-10 mx-auto flex min-h-screen max-w-[1600px] flex-col px-4 pt-28 lg:px-6">
                     {error ? (
                         <div className="mb-6 rounded-2xl border border-rose-300/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100 backdrop-blur">
-                            ⚠️ {error}
+                            {error}
                         </div>
                     ) : null}
 
                     {searchError ? (
                         <div className="mb-6 rounded-2xl border border-rose-300/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100 backdrop-blur">
-                            ⚠️ {searchError}
+                            {searchError}
                         </div>
                     ) : null}
 
@@ -690,9 +741,11 @@ export default function ManualPlannerPage() {
                                 </HeroButton>
 
                                 <HeroButton onClick={() => navigate("/discover")}>
-                                    ← Back
+                                    Back
                                 </HeroButton>
                             </div>
+
+                            {selectedDestinationPreview}
                         </div>
 
                         <div className="w-full max-w-[650px] justify-self-end space-y-5 pb-12 lg:pb-20">
@@ -749,7 +802,7 @@ export default function ManualPlannerPage() {
                                                         key={destination.id || destination.cityCode}
                                                         value={destination.cityCode}
                                                     >
-                                                        {destination.name} ({destination.cityCode})
+                                                        {destination.name}
                                                     </option>
                                                 ))}
                                             </select>
@@ -781,7 +834,7 @@ export default function ManualPlannerPage() {
                                     <Field label="From">
                                         <input
                                             type="text"
-                                            placeholder="DD.MM.YYYY"
+                                            placeholder="dd.mm.yyyy"
                                             value={formatDateDisplay(searchForm.from)}
                                             onChange={(e) => {
                                                 const raw = e.target.value;
@@ -795,7 +848,7 @@ export default function ManualPlannerPage() {
                                     <Field label="To">
                                         <input
                                             type="text"
-                                            placeholder="DD.MM.YYYY"
+                                            placeholder="dd.mm.yyyy"
                                             value={formatDateDisplay(searchForm.to)}
                                             onChange={(e) => {
                                                 const raw = e.target.value;
@@ -837,18 +890,6 @@ export default function ManualPlannerPage() {
                                 {showAdvanced && (
                                     <div className="mt-5 rounded-[26px] border border-white/10 bg-white/8 p-5">
                                         <div className="grid gap-4 md:grid-cols-2">
-                                            <Field label="Country of residence">
-                                                <input
-                                                    type="text"
-                                                    maxLength={2}
-                                                    value={searchForm.countryOfResidence}
-                                                    onChange={(e) =>
-                                                        updateSearchForm("countryOfResidence", e.target.value.toUpperCase())
-                                                    }
-                                                    className={inputClass()}
-                                                />
-                                            </Field>
-
                                             <Field label="Rooms">
                                                 <input
                                                     type="number"
@@ -949,76 +990,6 @@ export default function ManualPlannerPage() {
                                 )}
                             </GlassCard>
 
-                            <GlassCard className="p-6 text-white">
-                                <div className="mb-5">
-                                    <div className="text-xl font-bold text-white">Selected destination</div>
-                                    <div className="mt-1 text-sm text-white/70">
-                                        Quick preview before moving to {tripMode === "HOTEL_ONLY" ? "hotel" : "flight"} results
-                                    </div>
-                                </div>
-
-                                {!selectedDestination ? (
-                                    <div className="rounded-2xl bg-white/10 px-4 py-6 text-sm text-white/75">
-                                        Select a destination to continue.
-                                    </div>
-                                ) : (
-                                    <div className="overflow-hidden rounded-[24px] border border-white/10 bg-white/10">
-                                        <CardImage
-                                            src={destinationImageUrl(selectedDestination)}
-                                            alt={selectedDestination.name}
-                                            className="h-64 w-full object-cover"
-                                        />
-
-                                        <div className="p-5">
-                                            <h3 className="text-xl font-bold text-white">
-                                                {selectedDestination.name}
-                                            </h3>
-
-                                            <div className="mt-2 flex flex-wrap gap-2">
-                                                <Badge tone="green">{activeCountryName || "Country"}</Badge>
-                                                <Badge tone="white">
-                                                    City code: {selectedDestination.cityCode || "—"}
-                                                </Badge>
-                                                <Badge tone="blue">
-                                                    Origin airport: {resolvedOriginIata}
-                                                </Badge>
-                                                <Badge tone="yellow">
-                                                    {tripMode === "HOTEL_ONLY" ? "Hotel only" : "Flight + Hotel"}
-                                                </Badge>
-                                            </div>
-
-                                            <p className="mt-4 text-sm leading-6 text-white/75">
-                                                {selectedDestination.description || "No description available."}
-                                            </p>
-
-                                            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                                                <div className="rounded-2xl bg-white/10 p-4">
-                                                    <div className="text-xs uppercase tracking-wide text-white/55">
-                                                        Dates
-                                                    </div>
-                                                    <div className="mt-2 font-semibold text-white">
-                                                        {searchForm.from
-                                                            ? `${formatDateDisplay(searchForm.from)}${
-                                                                searchForm.to ? ` → ${formatDateDisplay(searchForm.to)}` : ""
-                                                            }`
-                                                            : "Not selected"}
-                                                    </div>
-                                                </div>
-
-                                                <div className="rounded-2xl bg-white/10 p-4">
-                                                    <div className="text-xs uppercase tracking-wide text-white/55">
-                                                        Guests / Currency
-                                                    </div>
-                                                    <div className="mt-2 font-semibold text-white">
-                                                        {searchForm.adults} guest{Number(searchForm.adults) > 1 ? "s" : ""} ·{" "}
-                                                        {searchForm.targetCurrency}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </GlassCard>
                         </div>
                     </div>
                 </div>
