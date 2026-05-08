@@ -18,6 +18,7 @@ import tripmindai.com.mk.maintripservice.dto.hotels.HotelSearchItemDto;
 import tripmindai.com.mk.maintripservice.dto.hotels.HotelSearchResponseDto;
 import tripmindai.com.mk.maintripservice.dto.hotels.RoomInfoDto;
 import tripmindai.com.mk.maintripservice.dto.trip.TripSearchResponse;
+import tripmindai.com.mk.maintripservice.repository.DestinationRepository;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
@@ -37,22 +38,27 @@ import java.util.stream.Collectors;
 public class TripSearchService {
 
     private static final String TEST_HOTEL_ID = "TEST-HOTEL-1";
+    private static final int HOTEL_SEARCH_PAGES = 3;
+    private static final int MAX_COMBINED_HOTELS = 90;
 
     private final FlightsClient flightsClient;
     private final HotelsClient hotelsClient;
     private final Executor tripSearchExecutor;
     private final CurrencyConversionService currencyConversionService;
+    private final DestinationRepository destinationRepository;
 
     public TripSearchService(
             FlightsClient flightsClient,
             HotelsClient hotelsClient,
             Executor tripSearchExecutor,
-            CurrencyConversionService currencyConversionService
+            CurrencyConversionService currencyConversionService,
+            DestinationRepository destinationRepository
     ) {
         this.flightsClient = flightsClient;
         this.hotelsClient = hotelsClient;
         this.tripSearchExecutor = tripSearchExecutor;
         this.currencyConversionService = currencyConversionService;
+        this.destinationRepository = destinationRepository;
     }
 
     public TripSearchResponse search(
@@ -97,7 +103,13 @@ public class TripSearchService {
             Boolean bestRateOnly
     ) {
         LocalDate checkIn = parseCheckIn(from);
+        if (checkIn.isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("Travel dates cannot be in the past.");
+        }
         LocalDate checkOut = parseCheckOut(checkIn, to);
+        if (checkOut.isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("Travel dates cannot be in the past.");
+        }
 
         String checkInStr = checkIn.toString();
         String checkOutStr = checkOut.toString();
@@ -113,7 +125,7 @@ public class TripSearchService {
         );
 
         CompletableFuture<HotelsSearchResult> hotelsFuture = CompletableFuture.supplyAsync(
-                () -> safeHotelsSearch(destination, cityCode, checkInStr, checkOutStr, safeAdults, priceRange),
+                () -> safeHotelsSearch(destination, cityCode, checkInStr, checkOutStr, safeAdults, safeRoomQuantity, priceRange),
                 tripSearchExecutor
         );
 
@@ -122,22 +134,28 @@ public class TripSearchService {
 
         List<FlightOfferDto> flights = flightsResult.flights();
 
-        HotelSearchResponseDto hotelSearchResponse = hotelsResult.response();
-        List<HotelSearchItemDto> hotels = hotelSearchResponse != null && hotelSearchResponse.hotels() != null
-                ? hotelSearchResponse.hotels()
+        List<HotelSearchItemDto> hotels = hotelsResult.response() != null && hotelsResult.response().hotels() != null
+                ? hotelsResult.response().hotels()
                 : List.of();
 
-        hotels = filterAndSortHotelsByBudget(hotels, priceRange);
+        List<HotelOfferDto> hotelOffers = new ArrayList<>();
+        for (HotelSearchRoomResult roomResult : hotelsResult.roomResults()) {
+            HotelSearchResponseDto roomResponse = roomResult.response();
+            List<HotelSearchItemDto> roomHotels = roomResponse != null && roomResponse.hotels() != null
+                    ? roomResponse.hotels()
+                    : List.of();
 
-        List<HotelOfferDto> hotelOffers = mapHotelOffersFromHotels(
-                hotels,
-                safeAdults,
-                destinationCountryCode,
-                normalizedTargetCurrency,
-                safeRoomQuantity
-        );
+            roomHotels = filterAndSortHotelsByBudget(roomHotels, priceRange);
+            hotelOffers.addAll(mapHotelOffersFromHotels(
+                    roomHotels,
+                    safeAdults,
+                    destinationCountryCode,
+                    normalizedTargetCurrency,
+                    roomResult.roomQuantity()
+            ));
+        }
 
-        hotelOffers = pickCheapestOfferPerHotelWithinBudget(hotelOffers, priceRange);
+        hotelOffers = pickCheapestOfferPerHotelRoomWithinBudget(hotelOffers, priceRange);
         hotels = keepOnlyHotelsWithMatchingOffers(hotels, hotelOffers);
 
         return new TripSearchResponse(
@@ -158,6 +176,17 @@ public class TripSearchService {
             int adults,
             String cityName
     ) {
+        return hotelDetails(hotelId, checkIn, checkOut, adults, cityName, 1);
+    }
+
+    public HotelDetailsDto hotelDetails(
+            String hotelId,
+            String checkIn,
+            String checkOut,
+            int adults,
+            String cityName,
+            int roomQuantity
+    ) {
         if (TEST_HOTEL_ID.equalsIgnoreCase(hotelId)) {
             return buildTestHotelDetails(cityName);
         }
@@ -167,7 +196,8 @@ public class TripSearchService {
                 safeDateOrTomorrow(checkIn),
                 safeDateOrNextDay(checkIn, checkOut),
                 Math.max(1, adults),
-                cityName
+                cityName,
+                Math.max(1, roomQuantity)
         );
     }
 
@@ -178,6 +208,17 @@ public class TripSearchService {
             int adults,
             String cityName
     ) {
+        return hotelFullDetails(hotelId, checkIn, checkOut, adults, cityName, 1);
+    }
+
+    public HotelFullDetailsDto hotelFullDetails(
+            String hotelId,
+            String checkIn,
+            String checkOut,
+            int adults,
+            String cityName,
+            int roomQuantity
+    ) {
         if (TEST_HOTEL_ID.equalsIgnoreCase(hotelId)) {
             return buildTestHotelFullDetails(cityName);
         }
@@ -187,7 +228,8 @@ public class TripSearchService {
                 safeDateOrTomorrow(checkIn),
                 safeDateOrNextDay(checkIn, checkOut),
                 Math.max(1, adults),
-                cityName
+                cityName,
+                Math.max(1, roomQuantity)
         );
     }
 
@@ -236,55 +278,218 @@ public class TripSearchService {
             String checkIn,
             String checkOut,
             int adults,
+            int roomQuantity,
             String priceRange
     ) {
+        int requestedRoomQuantity = Math.max(1, roomQuantity);
+
         try {
             String hotelQuery = firstNonBlank(cityCode, destination);
             List<DestinationSearchDto> destinations = hotelsClient.searchDestinations(hotelQuery);
 
             if (destinations == null || destinations.isEmpty()) {
                 System.out.println("TripSearchService: hotel destination search returned no destinations.");
+                HotelSearchResponseDto response = buildEmptyHotelSearch(checkIn, checkOut, adults);
                 return new HotelsSearchResult(
-                        buildEmptyHotelSearch(checkIn, checkOut, adults),
+                        response,
                         true,
-                        null
+                        null,
+                        List.of(new HotelSearchRoomResult(response, requestedRoomQuantity))
                 );
             }
 
-            DestinationSearchDto best = pickBestDestination(destinations, destination);
+            DestinationSearchDto best = pickBestDestination(destinations, hotelQuery);
 
             if (best == null || isBlank(best.destId()) || isBlank(best.destType())) {
                 System.out.println("TripSearchService: hotel destination mapping returned no usable result.");
+                HotelSearchResponseDto response = buildEmptyHotelSearch(checkIn, checkOut, adults);
                 return new HotelsSearchResult(
-                        buildEmptyHotelSearch(checkIn, checkOut, adults),
+                        response,
                         true,
-                        null
+                        null,
+                        List.of(new HotelSearchRoomResult(response, requestedRoomQuantity))
                 );
             }
 
-            HotelSearchResponseDto response = hotelsClient.searchHotels(
-                    best.destId(),
-                    best.destType(),
-                    checkIn,
-                    checkOut,
-                    adults,
-                    1,
-                    priceRange
-            );
+            List<HotelSearchRoomResult> roomResults = new ArrayList<>();
+            List<HotelSearchItemDto> combinedHotels = new ArrayList<>();
+            HotelSearchResponseDto firstResponse = null;
+
+            for (int candidateRoomQuantity : roomQuantityCandidates(adults, requestedRoomQuantity)) {
+                HotelSearchResponseDto response = searchHotelsAcrossPages(
+                        best,
+                        checkIn,
+                        checkOut,
+                        adults,
+                        candidateRoomQuantity,
+                        priceRange
+                );
+
+                if (firstResponse == null && response != null) {
+                    firstResponse = response;
+                }
+
+                if (!hasHotels(response)) {
+                    continue;
+                }
+
+                roomResults.add(new HotelSearchRoomResult(response, candidateRoomQuantity));
+                combinedHotels.addAll(response.hotels());
+            }
+
+            HotelSearchResponseDto response = firstResponse != null
+                    ? new HotelSearchResponseDto(
+                    firstResponse.destId(),
+                    firstResponse.destType(),
+                    firstResponse.checkIn(),
+                    firstResponse.checkOut(),
+                    firstResponse.adults(),
+                    firstResponse.pageNo(),
+                    combinedHotels
+            )
+                    : buildEmptyHotelSearch(checkIn, checkOut, adults);
+
+            if (roomResults.isEmpty()) {
+                roomResults = List.of(new HotelSearchRoomResult(response, requestedRoomQuantity));
+            }
 
             return new HotelsSearchResult(
-                    response != null ? response : buildEmptyHotelSearch(checkIn, checkOut, adults),
+                    response,
                     true,
-                    null
+                    null,
+                    roomResults
             );
         } catch (Exception e) {
             System.out.println("TripSearchService: hotels search failed: " + e.getMessage());
+            HotelSearchResponseDto response = buildEmptyHotelSearch(checkIn, checkOut, adults);
             return new HotelsSearchResult(
-                    buildEmptyHotelSearch(checkIn, checkOut, adults),
+                    response,
                     false,
-                    "Hotel service is temporarily unavailable. Please try again later."
+                    "Hotel service is temporarily unavailable. Please try again later.",
+                    List.of(new HotelSearchRoomResult(response, requestedRoomQuantity))
             );
         }
+    }
+
+    private String resolveHotelSearchQuery(String destination, String cityCode) {
+        String normalizedCityCode = cityCode == null ? "" : cityCode.trim();
+        if (!normalizedCityCode.isBlank()) {
+            String destinationName = destinationRepository.findByCityCodeIgnoreCase(normalizedCityCode)
+                    .map(d -> d.getName())
+                    .orElse(null);
+            if (!isBlank(destinationName)) {
+                return destinationName;
+            }
+        }
+
+        String normalizedDestination = destination == null ? "" : destination.trim();
+        if (!normalizedDestination.isBlank() && normalizedDestination.length() > 3) {
+            return normalizedDestination;
+        }
+
+        return normalizedCityCode;
+    }
+    private List<Integer> roomQuantityCandidates(int adults, int requestedRoomQuantity) {
+        int safeAdults = Math.max(1, adults);
+        List<Integer> candidates = new ArrayList<>();
+
+        if (safeAdults <= 3) {
+            addRoomCandidate(candidates, 1);
+            return candidates;
+        }
+
+        if (safeAdults == 4) {
+            addRoomCandidate(candidates, 1);
+            addRoomCandidate(candidates, 2);
+            return candidates;
+        }
+
+        addRoomCandidate(candidates, (int) Math.ceil(safeAdults / 3.0));
+        addRoomCandidate(candidates, requestedRoomQuantity);
+
+        return candidates;
+    }
+
+    private void addRoomCandidate(List<Integer> candidates, int roomQuantity) {
+        int safeRoomQuantity = Math.max(1, roomQuantity);
+        if (!candidates.contains(safeRoomQuantity)) {
+            candidates.add(safeRoomQuantity);
+        }
+    }
+
+    private boolean hasHotels(HotelSearchResponseDto response) {
+        return response != null && response.hotels() != null && !response.hotels().isEmpty();
+    }
+
+    private HotelSearchResponseDto searchHotelsAcrossPages(
+            DestinationSearchDto destination,
+            String checkIn,
+            String checkOut,
+            int adults,
+            int roomQuantity,
+            String priceRange
+    ) {
+        Map<String, HotelSearchItemDto> combinedByHotelId = new LinkedHashMap<>();
+        HotelSearchResponseDto firstResponse = null;
+
+        for (int page = 1; page <= HOTEL_SEARCH_PAGES; page++) {
+            HotelSearchResponseDto pageResponse = hotelsClient.searchHotels(
+                    destination.destId(),
+                    destination.destType(),
+                    checkIn,
+                    checkOut,
+                    adults,
+                    page,
+                    priceRange,
+                    roomQuantity
+            );
+
+            if (pageResponse == null) {
+                continue;
+            }
+
+            if (firstResponse == null) {
+                firstResponse = pageResponse;
+            }
+
+            List<HotelSearchItemDto> pageHotels = pageResponse.hotels() != null
+                    ? pageResponse.hotels()
+                    : List.of();
+
+            if (pageHotels.isEmpty()) {
+                break;
+            }
+
+            for (HotelSearchItemDto hotel : pageHotels) {
+                if (hotel == null || isBlank(hotel.hotelId())) {
+                    continue;
+                }
+
+                combinedByHotelId.putIfAbsent(hotel.hotelId(), hotel);
+
+                if (combinedByHotelId.size() >= MAX_COMBINED_HOTELS) {
+                    break;
+                }
+            }
+
+            if (combinedByHotelId.size() >= MAX_COMBINED_HOTELS) {
+                break;
+            }
+        }
+
+        if (firstResponse == null) {
+            return buildEmptyHotelSearch(checkIn, checkOut, adults);
+        }
+
+        return new HotelSearchResponseDto(
+                firstResponse.destId(),
+                firstResponse.destType(),
+                firstResponse.checkIn(),
+                firstResponse.checkOut(),
+                firstResponse.adults(),
+                1,
+                new ArrayList<>(combinedByHotelId.values())
+        );
     }
 
     private HotelSearchResponseDto buildEmptyHotelSearch(String checkIn, String checkOut, int adults) {
@@ -377,7 +582,7 @@ public class TripSearchService {
                     currency,
                     null,
                     totalPrice,
-                    "SEARCH-" + item.hotelId(),
+                    "SEARCH-" + item.hotelId() + "-R" + (roomQuantity == null ? 1 : Math.max(1, roomQuantity)),
                     "Cheapest matching room",
                     null,
                     null,
@@ -406,7 +611,7 @@ public class TripSearchService {
         return result;
     }
 
-    private List<HotelOfferDto> pickCheapestOfferPerHotelWithinBudget(List<HotelOfferDto> offers, String priceRange) {
+    private List<HotelOfferDto> pickCheapestOfferPerHotelRoomWithinBudget(List<HotelOfferDto> offers, String priceRange) {
         if (offers == null || offers.isEmpty()) {
             return List.of();
         }
@@ -417,7 +622,7 @@ public class TripSearchService {
                 .filter(Objects::nonNull)
                 .filter(offer -> !isBlank(offer.hotelId()))
                 .filter(offer -> isPriceWithinBounds(priceForOffer(offer), bounds))
-                .collect(Collectors.groupingBy(HotelOfferDto::hotelId))
+                .collect(Collectors.groupingBy(offer -> offer.hotelId() + "|" + Math.max(1, offer.roomQuantity() == null ? 1 : offer.roomQuantity())))
                 .values()
                 .stream()
                 .map(group -> group.stream()
@@ -439,14 +644,20 @@ public class TripSearchService {
         Map<String, HotelOfferDto> cheapestByHotelId = new LinkedHashMap<>();
         for (HotelOfferDto offer : hotelOffers) {
             if (offer != null && !isBlank(offer.hotelId())) {
-                cheapestByHotelId.put(offer.hotelId(), offer);
+                cheapestByHotelId.putIfAbsent(offer.hotelId(), offer);
             }
         }
 
+        Map<String, HotelSearchItemDto> uniqueHotels = new LinkedHashMap<>();
         return hotels.stream()
                 .filter(Objects::nonNull)
                 .filter(hotel -> !isBlank(hotel.hotelId()) && cheapestByHotelId.containsKey(hotel.hotelId()))
                 .sorted(Comparator.comparingDouble(hotel -> priceForOffer(cheapestByHotelId.get(hotel.hotelId()))))
+                .filter(hotel -> {
+                    if (uniqueHotels.containsKey(hotel.hotelId())) return false;
+                    uniqueHotels.put(hotel.hotelId(), hotel);
+                    return true;
+                })
                 .toList();
     }
 
@@ -697,7 +908,14 @@ public class TripSearchService {
     private record HotelsSearchResult(
             HotelSearchResponseDto response,
             boolean serviceAvailable,
-            String message
+            String message,
+            List<HotelSearchRoomResult> roomResults
+    ) {
+    }
+
+    private record HotelSearchRoomResult(
+            HotelSearchResponseDto response,
+            int roomQuantity
     ) {
     }
 

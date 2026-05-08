@@ -39,18 +39,18 @@ public class ProfileController {
         String email = normalizeEmail(req.email());
 
         if (firstName.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "firstName required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "First name is required.");
         }
         if (lastName.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "lastName required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Last name is required.");
         }
         if (email.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "email required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email address is required.");
         }
 
         var existing = users.findByEmailIgnoreCase(email);
         if (existing.isPresent() && !existing.get().getId().equals(user.getId())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "email already in use");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email address already exists.");
         }
 
         boolean emailChanged = !user.getEmail().equalsIgnoreCase(email);
@@ -79,22 +79,22 @@ public class ProfileController {
         String confirmPassword = trim(req.confirmPassword());
 
         if (oldPassword.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "oldPassword required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Old password is required.");
         }
         if (newPassword.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "newPassword required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "New password is required.");
         }
         if (confirmPassword.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "confirmPassword required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Confirm password is required.");
         }
         if (!passwordEncoder.matches(oldPassword, user.getPasswordHash())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "old password is incorrect");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Old password is incorrect.");
         }
         if (!newPassword.equals(confirmPassword)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "new passwords do not match");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "New password and confirm password do not match.");
         }
         if (newPassword.length() < 8) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "new password too short");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "New password must be at least 8 characters long.");
         }
 
         user.setPasswordHash(passwordEncoder.encode(newPassword));
@@ -107,11 +107,11 @@ public class ProfileController {
 
     private User getAuthenticatedUser(Authentication auth) {
         if (auth == null || auth.getName() == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "not authenticated");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authenticated.");
         }
 
         return users.findByEmailIgnoreCase(auth.getName())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "user not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found."));
     }
 
     private String normalizeEmail(String value) {

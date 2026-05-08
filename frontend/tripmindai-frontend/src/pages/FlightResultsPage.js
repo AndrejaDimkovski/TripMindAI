@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const FLOW_STORAGE_KEY = "tm_flow_v1";
+const RESULTS_PER_PAGE = 10;
 
 function readFlowState() {
     try {
@@ -167,11 +168,55 @@ function InfoTile({ label, value }) {
     );
 }
 
+function PaginationControls({ currentPage, totalPages, onPageChange }) {
+    if (totalPages <= 1) return null;
+
+    const pages = Array.from({ length: totalPages }, (_, index) => index + 1);
+
+    return (
+        <div className="flex flex-wrap items-center gap-2">
+            <button
+                type="button"
+                onClick={() => onPageChange(currentPage - 1)}
+                disabled={currentPage <= 1}
+                className="rounded-2xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+                Previous
+            </button>
+
+            {pages.map((page) => (
+                <button
+                    key={page}
+                    type="button"
+                    onClick={() => onPageChange(page)}
+                    className={`h-10 min-w-10 rounded-2xl px-3 text-sm font-bold transition ${
+                        page === currentPage
+                            ? "bg-emerald-500 text-white"
+                            : "border border-white/15 bg-white/10 text-white hover:bg-white/20"
+                    }`}
+                >
+                    {page}
+                </button>
+            ))}
+
+            <button
+                type="button"
+                onClick={() => onPageChange(currentPage + 1)}
+                disabled={currentPage >= totalPages}
+                className="rounded-2xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+                Next
+            </button>
+        </div>
+    );
+}
+
 export default function FlightResultsPage() {
     const navigate = useNavigate();
 
     const [flow, setFlow] = useState(null);
     const [selectedFlightIndex, setSelectedFlightIndex] = useState(null);
+    const [currentPage, setCurrentPage] = useState(1);
 
     useEffect(() => {
         const current = readFlowState();
@@ -198,6 +243,10 @@ export default function FlightResultsPage() {
         return Array.isArray(flow?.searchResult?.flights) ? flow.searchResult.flights : [];
     }, [flow]);
 
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [flights.length]);
+
     const hotelsCount = useMemo(() => {
         return Array.isArray(flow?.searchResult?.hotels) ? flow.searchResult.hotels.length : 0;
     }, [flow]);
@@ -216,6 +265,17 @@ export default function FlightResultsPage() {
     const flightsMessage =
         flow?.searchResult?.flightsMessage ||
         "Flight service is temporarily unavailable. Please try again later.";
+
+    const totalPages = Math.max(1, Math.ceil(flights.length / RESULTS_PER_PAGE));
+    const safeCurrentPage = Math.min(currentPage, totalPages);
+    const pageStartIndex = (safeCurrentPage - 1) * RESULTS_PER_PAGE;
+    const pageEndIndex = Math.min(pageStartIndex + RESULTS_PER_PAGE, flights.length);
+    const paginatedFlights = flights.slice(pageStartIndex, pageEndIndex);
+
+    function changePage(page) {
+        const nextPage = Math.min(Math.max(page, 1), totalPages);
+        setCurrentPage(nextPage);
+    }
 
     function persistSelectedFlight(index) {
         const current = readFlowState() || {};
@@ -366,7 +426,19 @@ export default function FlightResultsPage() {
                     ) : (
                         <div className="mt-10 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
                             <div className="space-y-4">
-                                {flights.map((flight, index) => {
+                                <div className="flex flex-col gap-3 rounded-[24px] border border-white/10 bg-white/10 p-4 text-white sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="text-sm font-semibold text-white/75">
+                                        Showing {pageStartIndex + 1}-{pageEndIndex} of {flights.length} flights
+                                    </div>
+                                    <PaginationControls
+                                        currentPage={safeCurrentPage}
+                                        totalPages={totalPages}
+                                        onPageChange={changePage}
+                                    />
+                                </div>
+
+                                {paginatedFlights.map((flight, pageIndex) => {
+                                    const index = pageStartIndex + pageIndex;
                                     const isSelected = selectedFlightIndex === index;
 
                                     return (
@@ -455,6 +527,14 @@ export default function FlightResultsPage() {
                                         </GlassPanel>
                                     );
                                 })}
+
+                                <div className="flex justify-end">
+                                    <PaginationControls
+                                        currentPage={safeCurrentPage}
+                                        totalPages={totalPages}
+                                        onPageChange={changePage}
+                                    />
+                                </div>
                             </div>
 
                             <aside>

@@ -291,6 +291,7 @@ function CheapestOfferCard({
                                bookingTo,
                                nights,
                                adults,
+                               roomCount,
                                totalText,
                                nightlyText,
                                taxText,
@@ -333,7 +334,7 @@ function CheapestOfferCard({
                     label="Guests / Nights"
                     value={`${offer?.adults || adults} guests${(offer?.nights || nights) ? ` / ${offer?.nights || nights} nights` : ""}`}
                 />
-                <InfoTile label="Room quantity" value={offer?.roomQuantity || 1} />
+                <InfoTile label="Room quantity" value={roomCount || offer?.roomQuantity || 1} />
                 {derivedBoardType ? <InfoTile label="Board type" value={derivedBoardType} /> : null}
                 {derivedPaymentPolicy ? <InfoTile label="Payment policy" value={derivedPaymentPolicy} /> : null}
                 {mealplanText ? <InfoTile label="Meal plan note" value={mealplanText} /> : null}
@@ -456,6 +457,7 @@ export default function HotelDetailsPage() {
                     new Date(Date.now() + 4 * 86400000).toISOString().slice(0, 10);
 
                 const adults = Number(stateSearch?.adults || stateOffer?.adults || 1);
+                const roomQuantity = Number(stateOffer?.roomQuantity || stateSearch?.roomQuantity || 1);
                 const cityName = stateSearch?.destinationName || "";
 
                 const data = await getHotelFullDetails({
@@ -463,6 +465,7 @@ export default function HotelDetailsPage() {
                     checkIn,
                     checkOut,
                     adults,
+                    roomQuantity,
                     cityName,
                 });
 
@@ -487,9 +490,11 @@ export default function HotelDetailsPage() {
         stateSearch?.from,
         stateSearch?.to,
         stateSearch?.adults,
+        stateSearch?.roomQuantity,
         stateOffer?.checkInDate,
         stateOffer?.checkOutDate,
         stateOffer?.adults,
+        stateOffer?.roomQuantity,
     ]);
 
     const offers = useMemo(() => {
@@ -879,6 +884,7 @@ export default function HotelDetailsPage() {
                                             nights={nights}
                                             adults={adults}
                                             totalText={totalText}
+                                            roomCount={roomCount}
                                             nightlyText={nightlyText}
                                             taxText={taxText}
                                             derivedBoardType={derivedBoardType}

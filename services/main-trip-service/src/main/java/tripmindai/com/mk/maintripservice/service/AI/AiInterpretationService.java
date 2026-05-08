@@ -174,7 +174,9 @@ public class AiInterpretationService {
         List<String> candidateDestinations = buildCandidateDestinations(
                 mergedSignals,
                 validatedDestinationResolution,
-                aiExtract
+                aiExtract,
+                prompt,
+                destinations
         );
 
         List<String> candidateCountries = buildCandidateCountries(
@@ -248,11 +250,13 @@ public class AiInterpretationService {
 
         String fromDate = firstNonBlank(
                 extractIsoDate(prompt, "from"),
+                extractNaturalLanguageDate(prompt, "from"),
                 normalizeInputDate(safe(req.fromDate()))
         );
 
         String toDate = firstNonBlank(
                 extractIsoDate(prompt, "to"),
+                extractNaturalLanguageDate(prompt, "to"),
                 normalizeInputDate(safe(req.toDate()))
         );
 
@@ -364,12 +368,14 @@ public class AiInterpretationService {
         String fromDate = firstNonBlank(
                 base.fromDate(),
                 extractIsoDate(prompt, "from"),
+                extractNaturalLanguageDate(prompt, "from"),
                 aiFromDate
         );
 
         String toDate = firstNonBlank(
                 base.toDate(),
                 extractIsoDate(prompt, "to"),
+                extractNaturalLanguageDate(prompt, "to"),
                 aiToDate
         );
 
@@ -387,8 +393,13 @@ public class AiInterpretationService {
         );
 
         List<String> mentionedDestinations = new ArrayList<>(extractMentionedDestinations(prompt, destinations));
+        boolean hasExplicitDestinationSignal = base.destinationText() != null && !base.destinationText().isBlank()
+                || !mentionedDestinations.isEmpty()
+                || (extractRawCountryOrPlaceAfterTo(prompt) != null && !extractRawCountryOrPlaceAfterTo(prompt).isBlank());
+
         for (String candidate : aiCandidateDestinations) {
-            if (!mentionedDestinations.contains(candidate)) {
+            if (isAllowedAiDestinationCandidate(candidate, prompt, hasExplicitDestinationSignal)
+                    && !mentionedDestinations.contains(candidate)) {
                 mentionedDestinations.add(candidate);
             }
         }
@@ -638,15 +649,25 @@ public class AiInterpretationService {
     private List<String> buildCandidateDestinations(
             ParsedSignals signals,
             DestinationResolution destinationResolution,
-            JsonNode aiExtract
+            JsonNode aiExtract,
+            String prompt,
+            List<Destination> destinations
     ) {
         LinkedHashSet<String> out = new LinkedHashSet<>();
+        boolean hasExplicitDestinationSignal =
+                (signals.destinationText() != null && !signals.destinationText().isBlank())
+                        || (signals.mentionedDestinations() != null && !signals.mentionedDestinations().isEmpty())
+                        || (extractRawCountryOrPlaceAfterTo(prompt) != null && !extractRawCountryOrPlaceAfterTo(prompt).isBlank());
 
         if (signals.mentionedDestinations() != null) {
             out.addAll(signals.mentionedDestinations());
         }
 
-        out.addAll(readStringList(aiExtract, "candidateDestinations"));
+        for (String candidate : readStringList(aiExtract, "candidateDestinations")) {
+            if (isAllowedAiDestinationCandidate(candidate, prompt, hasExplicitDestinationSignal)) {
+                out.add(candidate);
+            }
+        }
 
         if (signals.destinationText() != null && !signals.destinationText().isBlank()) {
             out.add(signals.destinationText());
@@ -659,6 +680,24 @@ public class AiInterpretationService {
         }
 
         return out.stream().limit(TravelPromptMappings.MAX_RESULTS).toList();
+    }
+
+    private boolean isAllowedAiDestinationCandidate(
+            String candidate,
+            String prompt,
+            boolean hasExplicitDestinationSignal
+    ) {
+        if (candidate == null || candidate.isBlank()) return false;
+
+        if (!hasExplicitDestinationSignal) {
+            return true;
+        }
+
+        String normalizedPrompt = normalizeText(prompt);
+        String normalizedCandidate = normalizeText(candidate);
+
+        return containsWholeWord(normalizedPrompt, normalizedCandidate)
+                || fuzzyPromptContains(normalizedPrompt, normalizedCandidate);
     }
 
     private List<String> buildCandidateCountries(ParsedSignals signals, JsonNode aiExtract) {
@@ -1006,6 +1045,11 @@ public class AiInterpretationService {
     private Integer extractPeople(String text) {
         String t = normalizeText(text);
 
+        Integer familyPeople = extractAdultChildPeople(t);
+        if (familyPeople != null) {
+            return familyPeople;
+        }
+
         for (Map.Entry<String, Integer> entry : TravelPromptMappings.PEOPLE_KEYWORDS.entrySet()) {
             if (containsWholeWord(t, entry.getKey())) {
                 return entry.getValue();
@@ -1024,14 +1068,53 @@ public class AiInterpretationService {
 
         if (t.contains("just me") || t.contains("solo") || t.contains("alone") || t.contains("myself")) return 1;
         if (t.contains("couple")) return 2;
+        if (t.contains("with my partner")) return 2;
+        if (t.contains("my partner and i")) return 2;
+        if (t.contains("partner and i")) return 2;
+        if (t.contains("me and my partner")) return 2;
+        if (t.contains("me and partner")) return 2;
+        if (t.contains("with partner")) return 2;
+        if (t.contains("with my spouse")) return 2;
+        if (t.contains("me and my spouse")) return 2;
         if (t.contains("me and my wife")) return 2;
+        if (t.contains("with my wife")) return 2;
         if (t.contains("me and my husband")) return 2;
+        if (t.contains("with my husband")) return 2;
         if (t.contains("me and my girlfriend")) return 2;
+        if (t.contains("with my girlfriend")) return 2;
         if (t.contains("me and my boyfriend")) return 2;
+        if (t.contains("with my boyfriend")) return 2;
         if (t.contains("me and my friend")) return 2;
         if (t.contains("me and friend")) return 2;
 
         return null;
+    }
+
+    private Integer extractAdultChildPeople(String text) {
+        int adults = 0;
+        int children = 0;
+
+        Matcher adultMatcher = Pattern.compile("\\b(\\d+)\\s*(adults|adult|vozrasni)\\b").matcher(text);
+        while (adultMatcher.find()) {
+            adults += parsePositiveInt(adultMatcher.group(1));
+        }
+
+        Matcher childMatcher = Pattern.compile("\\b(\\d+)\\s*(children|child|kids|kid|deca)\\b").matcher(text);
+        while (childMatcher.find()) {
+            children += parsePositiveInt(childMatcher.group(1));
+        }
+
+        int total = adults + children;
+        return total > 0 ? total : null;
+    }
+
+    private int parsePositiveInt(String value) {
+        try {
+            int n = Integer.parseInt(value);
+            return Math.max(0, n);
+        } catch (Exception ignored) {
+            return 0;
+        }
     }
 
     private Integer extractDurationDays(String text) {
@@ -1097,6 +1180,69 @@ public class AiInterpretationService {
         if ("to".equals(which) && dates.size() > 1) return dates.get(1);
 
         return null;
+    }
+
+    private String extractNaturalLanguageDate(String text, String which) {
+        List<String> dates = extractNaturalLanguageDateRange(text);
+
+        if (dates.isEmpty()) return null;
+        if ("from".equals(which)) return dates.get(0);
+        if ("to".equals(which) && dates.size() > 1) return dates.get(1);
+
+        return null;
+    }
+
+    private List<String> extractNaturalLanguageDateRange(String text) {
+        String normalized = normalizeText(text);
+
+        Matcher dayMonthRange = Pattern.compile(
+                "\\b(?:from\\s+)?(\\d{1,2})\\s+([\\p{L}]+)\\s+(?:to|until|till|-)\\s+(\\d{1,2})\\s+(?:([\\p{L}]+)\\s+)?(\\d{4})\\b"
+        ).matcher(normalized);
+
+        if (dayMonthRange.find()) {
+            String from = buildIsoDate(dayMonthRange.group(5), dayMonthRange.group(2), dayMonthRange.group(1));
+            String to = buildIsoDate(
+                    dayMonthRange.group(5),
+                    dayMonthRange.group(4) == null ? dayMonthRange.group(2) : dayMonthRange.group(4),
+                    dayMonthRange.group(3)
+            );
+
+            if (from != null && to != null) {
+                return List.of(from, to);
+            }
+        }
+
+        Matcher monthDayRange = Pattern.compile(
+                "\\b(?:from\\s+)?([\\p{L}]+)\\s+(\\d{1,2})\\s+(?:to|until|till|-)\\s+(?:([\\p{L}]+)\\s+)?(\\d{1,2})\\s+(\\d{4})\\b"
+        ).matcher(normalized);
+
+        if (monthDayRange.find()) {
+            String from = buildIsoDate(monthDayRange.group(5), monthDayRange.group(1), monthDayRange.group(2));
+            String to = buildIsoDate(
+                    monthDayRange.group(5),
+                    monthDayRange.group(3) == null ? monthDayRange.group(1) : monthDayRange.group(3),
+                    monthDayRange.group(4)
+            );
+
+            if (from != null && to != null) {
+                return List.of(from, to);
+            }
+        }
+
+        return List.of();
+    }
+
+    private String buildIsoDate(String year, String monthText, String dayText) {
+        Integer month = TravelPromptMappings.MONTH_ALIASES.get(normalizeText(monthText));
+        if (month == null) return null;
+
+        try {
+            int day = Integer.parseInt(dayText);
+            int y = Integer.parseInt(year);
+            return LocalDate.of(y, month, day).toString();
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private String extractCountryName(String text, List<Country> countries) {
@@ -1250,17 +1396,24 @@ public class AiInterpretationService {
         String normalized = normalizeText(prompt);
 
         Matcher m = Pattern.compile(
-                "\\bfrom\\s+([\\p{L}]+(?:\\s+[\\p{L}]+){0,3}?)(?=\\s+(i\\s+want|want|to|for|with|in|on|at|end|start|middle|next)\\b|$)"
+                "\\bfrom\\s+([\\p{L}]+(?:\\s+[\\p{L}]+){0,3}?)(?=\\s+(and|i\\s+want|want|to|for|with|in|on|at|end|start|middle|next)\\b|$)"
         ).matcher(normalized);
 
         if (m.find()) {
             String candidate = m.group(1).trim();
             if (!candidate.isBlank()) {
-                return toTitleCase(candidate);
+                return toTitleCase(cleanupExtractedOrigin(candidate));
             }
         }
 
         return null;
+    }
+
+    private String cleanupExtractedOrigin(String value) {
+        return normalizeText(value)
+                .replaceFirst("\\s+and$", "")
+                .replaceFirst("\\s+(and|to|for|with|in|on|at)\\b.*$", "")
+                .trim();
     }
 
     private String resolveOriginToIata(String originCity) {
@@ -1638,13 +1791,16 @@ public class AiInterpretationService {
         String promptFlat = normalizeText(prompt).replace(" ", "");
         String destFlat = normalizeText(destinationName).replace(" ", "");
 
-        if (promptFlat.contains(destFlat) || destFlat.contains(promptFlat)) {
+        if (promptFlat.contains(destFlat)) {
             return true;
         }
 
         String[] tokens = normalizeText(prompt).split("\\s+");
         for (String token : tokens) {
-            if (token.length() >= 4 && !isStopWord(token) && levenshteinDistance(token, destFlat) <= 2) {
+            if (token.length() >= 4
+                    && !isStopWord(token)
+                    && token.length() >= Math.max(4, destFlat.length() - 1)
+                    && levenshteinDistance(token, destFlat) <= (destFlat.length() <= 5 ? 1 : 2)) {
                 return true;
             }
         }

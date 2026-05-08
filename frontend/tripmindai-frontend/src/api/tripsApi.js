@@ -44,6 +44,7 @@ export function getHotelDetails({
                                     checkIn,
                                     checkOut,
                                     adults = 1,
+                                    roomQuantity,
                                     cityName,
                                 }) {
     const params = new URLSearchParams({
@@ -53,6 +54,7 @@ export function getHotelDetails({
         adults: String(adults ?? 1),
     });
 
+    appendIfDefined(params, "roomQuantity", roomQuantity);
     appendIfPresent(params, "cityName", cityName);
 
     return apiGet(`/api/trips/hotel-details?${params.toString()}`);
@@ -63,6 +65,7 @@ export function getHotelFullDetails({
                                         checkIn,
                                         checkOut,
                                         adults = 1,
+                                        roomQuantity,
                                         cityName,
                                     }) {
     const params = new URLSearchParams({
@@ -72,6 +75,7 @@ export function getHotelFullDetails({
         adults: String(adults ?? 1),
     });
 
+    appendIfDefined(params, "roomQuantity", roomQuantity);
     appendIfPresent(params, "cityName", cityName);
 
     return apiGet(`/api/trips/hotel-full-details?${params.toString()}`);

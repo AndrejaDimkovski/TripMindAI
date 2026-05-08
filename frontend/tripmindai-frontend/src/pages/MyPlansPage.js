@@ -15,6 +15,10 @@ function fmtMoney(v) {
     return Number.isFinite(n) ? n.toFixed(2) : "0.00";
 }
 
+function moneyText(value, currency = "EUR") {
+    return `${fmtMoney(value)} ${currency || "EUR"}`;
+}
+
 function fmtDateDisplay(value) {
     if (!value) return "N/A";
     try {
@@ -494,7 +498,7 @@ function PlanDetailsModal({ plan, onClose }) {
                     />
                     <InfoTile
                         label="Total"
-                        value={`${fmtMoney(plan.totalPrice)} ${plan.totalCurrency || "EUR"}`}
+                        value={moneyText(plan.totalPrice, plan.totalCurrency)}
                     />
                 </div>
 
@@ -517,7 +521,7 @@ function PlanDetailsModal({ plan, onClose }) {
                                 <InfoTile label="Return arrival" value={fmtDateTime(plan.returnFlightArrivalAt)} />
                                 <InfoTile
                                     label="Flight price"
-                                    value={`${fmtMoney(plan.flightPrice)} ${plan.flightCurrency || "EUR"}`}
+                                    value={moneyText(plan.flightPrice, plan.flightCurrency)}
                                 />
                                 <InfoTile label="Trip type" value={formatTripType(plan.flightTripType)} />
                             </div>
@@ -539,7 +543,7 @@ function PlanDetailsModal({ plan, onClose }) {
                             {paymentPolicyText ? <InfoTile label="Payment policy" value={paymentPolicyText} /> : null}
                             <InfoTile
                                 label="Hotel price"
-                                value={`${fmtMoney(plan.hotelPrice)} ${plan.hotelCurrency || "EUR"}`}
+                                value={moneyText(plan.hotelPrice, plan.hotelCurrency)}
                             />
                         </div>
                     </GlassPanel>
@@ -554,10 +558,10 @@ function PlanDetailsModal({ plan, onClose }) {
 
                         <div className={`grid gap-3 ${hotelOnly ? "md:grid-cols-2" : "md:grid-cols-3"}`}>
                             {!hotelOnly ? (
-                                <InfoTile label="Flight cost" value={`${fmtMoney(plan.flightPrice)} ${plan.flightCurrency || "EUR"}`} />
+                                <InfoTile label="Flight cost" value={moneyText(plan.flightPrice, plan.flightCurrency)} />
                             ) : null}
-                            <InfoTile label="Hotel cost" value={`${fmtMoney(plan.hotelPrice)} ${plan.hotelCurrency || "EUR"}`} />
-                            <InfoTile label="Grand total" value={`${fmtMoney(plan.totalPrice)} ${plan.totalCurrency || "EUR"}`} />
+                            <InfoTile label="Hotel cost" value={moneyText(plan.hotelPrice, plan.hotelCurrency)} />
+                            <InfoTile label="Grand total" value={moneyText(plan.totalPrice, plan.totalCurrency)} />
                         </div>
                     </GlassPanel>
                 </div>
@@ -677,7 +681,7 @@ export default function MyPlansPage() {
 
                             <div className="mt-5 flex flex-wrap gap-2">
                                 <Badge tone="green">{plans.length} saved plans</Badge>
-                                <Badge tone="blue">EUR {fmtMoney(totalSaved)} total value</Badge>
+                                <Badge tone="blue">{moneyText(totalSaved)} total value</Badge>
                             </div>
                         </div>
 
@@ -685,7 +689,7 @@ export default function MyPlansPage() {
                             <GlassSection title="Overview" subtitle="Quick summary of your saved trips">
                                 <div className="grid gap-3 sm:grid-cols-2">
                                     <InfoTile label="Saved plans" value={plans.length} />
-                                    <InfoTile label="Total value" value={`EUR ${fmtMoney(totalSaved)}`} />
+                                    <InfoTile label="Total value" value={moneyText(totalSaved)} />
                                 </div>
 
                                 <div className="mt-4 rounded-2xl border border-emerald-300/20 bg-emerald-500/20 p-4">
@@ -793,7 +797,7 @@ export default function MyPlansPage() {
                                                             Total price
                                                         </div>
                                                         <div className="mt-2 text-2xl font-bold text-white">
-                                                            EUR {fmtMoney(p.totalPrice)} {p.totalCurrency || "EUR"}
+                                                            {moneyText(p.totalPrice, p.totalCurrency)}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -828,7 +832,7 @@ export default function MyPlansPage() {
                                                                     <div><b className="text-white">Return:</b> {fmtDateTime(p.returnFlightDepartureAt)} to {fmtDateTime(p.returnFlightArrivalAt)}</div>
                                                                 ) : null}
                                                                 <div><b className="text-white">Stops:</b> {formatStops(p.flightStops)}</div>
-                                                                <div><b className="text-white">Price:</b> EUR {fmtMoney(p.flightPrice)} {p.flightCurrency || "EUR"}</div>
+                                                                <div><b className="text-white">Price:</b> {moneyText(p.flightPrice, p.flightCurrency)}</div>
                                                             </div>
                                                         </div>
                                                     ) : null}
@@ -842,7 +846,7 @@ export default function MyPlansPage() {
                                                             <div><b className="text-white">Check-out:</b> {fmtDateDisplay(p.hotelCheckOutDate || p.toDate)}</div>
                                                             {boardTypeText ? <div><b className="text-white">Board:</b> {boardTypeText}</div> : null}
                                                             {paymentPolicyText ? <div><b className="text-white">Payment:</b> {paymentPolicyText}</div> : null}
-                                                            <div><b className="text-white">Price:</b> EUR {fmtMoney(p.hotelPrice)} {p.hotelCurrency || "EUR"}</div>
+                                                            <div><b className="text-white">Price:</b> {moneyText(p.hotelPrice, p.hotelCurrency)}</div>
                                                         </div>
                                                     </div>
                                                 </div>

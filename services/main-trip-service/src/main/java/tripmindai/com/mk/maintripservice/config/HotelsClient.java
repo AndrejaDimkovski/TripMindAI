@@ -62,7 +62,7 @@ public class HotelsClient {
             int adults,
             int pageNo
     ) {
-        return searchHotels(destId, destType, checkIn, checkOut, adults, pageNo, null);
+        return searchHotels(destId, destType, checkIn, checkOut, adults, pageNo, null, 1);
     }
 
     public HotelSearchResponseDto searchHotels(
@@ -73,6 +73,19 @@ public class HotelsClient {
             int adults,
             int pageNo,
             String priceRange
+    ) {
+        return searchHotels(destId, destType, checkIn, checkOut, adults, pageNo, priceRange, 1);
+    }
+
+    public HotelSearchResponseDto searchHotels(
+            String destId,
+            String destType,
+            String checkIn,
+            String checkOut,
+            int adults,
+            int pageNo,
+            String priceRange,
+            int roomQuantity
     ) {
         if (isBlank(destId) || isBlank(destType) || isBlank(checkIn) || isBlank(checkOut)) {
             return emptySearchResponse(destId, destType, checkIn, checkOut, adults, pageNo);
@@ -85,6 +98,7 @@ public class HotelsClient {
                 .queryParam("checkIn", checkIn)
                 .queryParam("checkOut", checkOut)
                 .queryParam("adults", Math.max(1, adults))
+                .queryParam("roomQuantity", Math.max(1, roomQuantity))
                 .queryParam("pageNo", Math.max(1, pageNo));
 
         if (!isBlank(priceRange)) {
@@ -110,6 +124,17 @@ public class HotelsClient {
             int adults,
             String cityName
     ) {
+        return hotelDetails(hotelId, checkIn, checkOut, adults, cityName, 1);
+    }
+
+    public HotelDetailsDto hotelDetails(
+            String hotelId,
+            String checkIn,
+            String checkOut,
+            int adults,
+            String cityName,
+            int roomQuantity
+    ) {
         if (isBlank(hotelId) || isBlank(checkIn) || isBlank(checkOut)) {
             return null;
         }
@@ -118,7 +143,8 @@ public class HotelsClient {
                 .fromUriString(hotelsBaseUrl + "/api/hotels/" + hotelId.trim() + "/details")
                 .queryParam("checkIn", checkIn)
                 .queryParam("checkOut", checkOut)
-                .queryParam("adults", Math.max(1, adults));
+                .queryParam("adults", Math.max(1, adults))
+                .queryParam("roomQuantity", Math.max(1, roomQuantity));
 
         if (!isBlank(cityName)) {
             builder.queryParam("cityName", cityName.trim());
@@ -138,6 +164,17 @@ public class HotelsClient {
             int adults,
             String cityName
     ) {
+        return hotelFullDetails(hotelId, checkIn, checkOut, adults, cityName, 1);
+    }
+
+    public HotelFullDetailsDto hotelFullDetails(
+            String hotelId,
+            String checkIn,
+            String checkOut,
+            int adults,
+            String cityName,
+            int roomQuantity
+    ) {
         if (isBlank(hotelId) || isBlank(checkIn) || isBlank(checkOut)) {
             return null;
         }
@@ -146,7 +183,8 @@ public class HotelsClient {
                 .fromUriString(hotelsBaseUrl + "/api/hotels/" + hotelId.trim() + "/full-details")
                 .queryParam("checkIn", checkIn)
                 .queryParam("checkOut", checkOut)
-                .queryParam("adults", Math.max(1, adults));
+                .queryParam("adults", Math.max(1, adults))
+                .queryParam("roomQuantity", Math.max(1, roomQuantity));
 
         if (!isBlank(cityName)) {
             builder.queryParam("cityName", cityName.trim());

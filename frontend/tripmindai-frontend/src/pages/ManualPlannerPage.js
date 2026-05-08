@@ -420,6 +420,16 @@ export default function ManualPlannerPage() {
             return "To date must be in dd.mm.yyyy format.";
         }
 
+        const todayIso = new Date().toISOString().slice(0, 10);
+
+        if (fromIso && fromIso < todayIso) {
+            return "Travel dates cannot be in the past.";
+        }
+
+        if (toIso && toIso < todayIso) {
+            return "Travel dates cannot be in the past.";
+        }
+
         if (toIso && toIso < fromIso) {
             return "To date cannot be before From date.";
         }

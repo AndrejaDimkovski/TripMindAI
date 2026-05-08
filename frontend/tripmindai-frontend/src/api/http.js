@@ -45,11 +45,12 @@ export async function apiFetch(path, options = {}) {
         }
 
         const message =
-            (typeof payload === "string" && payload) ||
             payload?.message ||
             payload?.detail ||
             payload?.error ||
-            "Request not succesful.";
+            payload?.title ||
+            (typeof payload === "string" && payload) ||
+            "Request not successful.";
 
         const error = new Error(message);
         error.status = response.status;
@@ -66,7 +67,7 @@ export const apiDelete = (path) => apiFetch(path, { method: "DELETE" });
 
 async function parseResponsePayload(response) {
     const contentType = response.headers.get("content-type") || "";
-    const isJson = contentType.includes("application/json");
+    const isJson = contentType.includes("application/json") || contentType.includes("+json");
 
     return isJson
         ? response.json().catch(() => null)

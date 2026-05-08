@@ -103,7 +103,7 @@ export default function RegisterPage() {
                 state: { email: form.email.trim() },
             });
         } catch (e2) {
-            setErr(e2?.message || "Registration failed.");
+            setErr(e2?.status === 409 ? "Email address already exists." : e2?.message || "Registration failed.");
         } finally {
             setLoading(false);
         }

@@ -51,6 +51,7 @@ public class BookingRapidApiClient {
             String arrivalDate,
             String departureDate,
             int adults,
+            int roomQuantity,
             int pageNo
     ) {
         if (isBlank(destId) || isBlank(destType)) return null;
@@ -64,7 +65,7 @@ public class BookingRapidApiClient {
                     .queryParam("departure_date", departureDate)
                     .queryParam("adults", Math.max(1, adults))
                     .queryParam("children_age", "0,17")
-                    .queryParam("room_qty", 1)
+                    .queryParam("room_qty", Math.max(1, roomQuantity))
                     .queryParam("page_number", Math.max(1, pageNo))
                     .queryParam("units", "metric")
                     .queryParam("temperature_unit", "c")
@@ -82,7 +83,8 @@ public class BookingRapidApiClient {
             String hotelId,
             String arrivalDate,
             String departureDate,
-            int adults
+            int adults,
+            int roomQuantity
     ) {
         if (isBlank(hotelId)) return null;
 
@@ -94,7 +96,7 @@ public class BookingRapidApiClient {
                     .queryParam("departure_date", departureDate)
                     .queryParam("adults", Math.max(1, adults))
                     .queryParam("children_age", "0,17")
-                    .queryParam("room_qty", 1)
+                    .queryParam("room_qty", Math.max(1, roomQuantity))
                     .queryParam("units", "metric")
                     .queryParam("temperature_unit", "c")
                     .queryParam("languagecode", defaultLanguage)
@@ -127,7 +129,8 @@ public class BookingRapidApiClient {
             String hotelId,
             String arrivalDate,
             String departureDate,
-            int adults
+            int adults,
+            int roomQuantity
     ) {
         if (isBlank(hotelId)) return null;
 
@@ -139,7 +142,7 @@ public class BookingRapidApiClient {
                     .queryParam("departure_date", departureDate)
                     .queryParam("adults", Math.max(1, adults))
                     .queryParam("children_age", "0,17")
-                    .queryParam("room_qty", 1)
+                    .queryParam("room_qty", Math.max(1, roomQuantity))
                     .queryParam("currency_code", defaultCurrency)
                     .queryParam("languagecode", defaultLanguage)
                     .toUriString();
@@ -154,7 +157,8 @@ public class BookingRapidApiClient {
             String hotelId,
             String arrivalDate,
             String departureDate,
-            int adults
+            int adults,
+            int roomQuantity
     ) {
         if (isBlank(hotelId)) return null;
 
@@ -166,7 +170,7 @@ public class BookingRapidApiClient {
                     .queryParam("departure_date", departureDate)
                     .queryParam("adults", Math.max(1, adults))
                     .queryParam("children_age", "0,17")
-                    .queryParam("room_qty", 1)
+                    .queryParam("room_qty", Math.max(1, roomQuantity))
                     .queryParam("currency_code", defaultCurrency)
                     .queryParam("languagecode", defaultLanguage)
                     .toUriString();

@@ -88,7 +88,7 @@ export default function ProfilePage() {
                 });
             } catch (e) {
                 if (!active) return;
-                setErr(e?.message || "Не може да се вчита профилот.");
+                setErr(e?.message || "Unable to load your profile.");
             } finally {
                 if (active) setLoading(false);
             }
@@ -118,9 +118,9 @@ export default function ProfilePage() {
         setErr("");
         setSuccess("");
 
-        if (!profile.firstName.trim()) return setErr("Внеси first name.");
-        if (!profile.lastName.trim()) return setErr("Внеси last name.");
-        if (!profile.email.trim()) return setErr("Внеси email.");
+        if (!profile.firstName.trim()) return setErr("Enter your first name.");
+        if (!profile.lastName.trim()) return setErr("Enter your last name.");
+        if (!profile.email.trim()) return setErr("Enter your email address.");
 
         setSavingProfile(true);
         try {
@@ -130,10 +130,10 @@ export default function ProfilePage() {
                 email: profile.email.trim(),
             });
 
-            setSuccess(res?.message || "Профилот е успешно ажуриран.");
+            setSuccess(res?.message || "Profile updated successfully.");
             await reloadProfile();
         } catch (e) {
-            setErr(e?.message || "Ажурирањето не успеа.");
+            setErr(e?.message || "Profile update failed.");
         } finally {
             setSavingProfile(false);
         }
@@ -144,11 +144,13 @@ export default function ProfilePage() {
         setErr("");
         setSuccess("");
 
-        if (!passwordForm.oldPassword) return setErr("Внеси old password.");
-        if (!passwordForm.newPassword) return setErr("Внеси new password.");
-        if (passwordForm.newPassword.length < 8) return setErr("New password нека биде барем 8 карактери.");
+        if (!passwordForm.oldPassword) return setErr("Enter your old password.");
+        if (!passwordForm.newPassword) return setErr("Enter your new password.");
+        if (passwordForm.newPassword.length < 8) {
+            return setErr("New password must be at least 8 characters long.");
+        }
         if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-            return setErr("New password и confirm password не се исти.");
+            return setErr("New password and confirm password do not match.");
         }
 
         setSavingPassword(true);
@@ -159,14 +161,14 @@ export default function ProfilePage() {
                 confirmPassword: passwordForm.confirmPassword,
             });
 
-            setSuccess(res?.message || "Password е успешно променет.");
+            setSuccess(res?.message || "Password changed successfully.");
             setPasswordForm({
                 oldPassword: "",
                 newPassword: "",
                 confirmPassword: "",
             });
         } catch (e) {
-            setErr(e?.message || "Менувањето на password не успеа.");
+            setErr(e?.message || "Password change failed.");
         } finally {
             setSavingPassword(false);
         }
@@ -180,13 +182,13 @@ export default function ProfilePage() {
         try {
             if (profile.twoFactorEnabled) {
                 const res = await apiPost("/api/auth/2fa/disable", {});
-                setSuccess(res?.message || "2FA успешно исклучено.");
+                setSuccess(res?.message || "Two-factor authentication disabled successfully.");
                 setProfile((p) => ({ ...p, twoFactorEnabled: false }));
             } else {
                 nav("/setup-2fa");
             }
         } catch (e) {
-            setErr(e?.message || "Грешка при менување на 2FA.");
+            setErr(e?.message || "Unable to update two-factor authentication.");
         } finally {
             setTwoFactorLoading(false);
         }
@@ -212,7 +214,7 @@ export default function ProfilePage() {
                         <HeroPill>Account Settings</HeroPill>
                         <h1 className="mt-6 text-4xl font-extrabold md:text-5xl">My Profile</h1>
                         <p className="mt-3 max-w-2xl text-sm text-white/70 md:text-base">
-                            Manage your account information, security settings and two-factor authentication.
+                            Manage your account information, security settings, and two-factor authentication.
                         </p>
                     </div>
 
@@ -262,7 +264,7 @@ export default function ProfilePage() {
                                             Username
                                         </div>
                                         <div className="mt-1 text-sm text-white/90">
-                                            {profile.username || "—"}
+                                            {profile.username || "N/A"}
                                         </div>
                                     </div>
 
@@ -327,7 +329,7 @@ export default function ProfilePage() {
                                         <div className="text-sm font-semibold text-white">Two-Factor Authentication</div>
                                         <div className="mt-1 text-sm text-white/65">
                                             {profile.twoFactorEnabled
-                                                ? "Enabled 2FA"
+                                                ? "2FA is enabled for this account."
                                                 : "Enable 2FA to protect your account."}
                                         </div>
                                     </div>
@@ -339,7 +341,7 @@ export default function ProfilePage() {
                                                 : "bg-amber-400/20 text-amber-300"
                                         }`}
                                     >
-                                        {profile.twoFactorEnabled ? "Enabled 2FA" : "Enable 2FA"}
+                                        {profile.twoFactorEnabled ? "Enabled" : "Disabled"}
                                     </span>
                                 </div>
 

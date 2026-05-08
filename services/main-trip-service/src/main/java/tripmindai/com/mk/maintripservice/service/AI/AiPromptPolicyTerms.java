@@ -70,7 +70,7 @@ public final class AiPromptPolicyTerms {
     );
 
     public static final Set<String> BLOCKED_TERMS = terms(
-            "hack", "malware", "exploit", "sql injection", "xss", "password", "bomb",
+            "hack", "hacker", "malware", "exploit", "sql injection", "xss", "password", "bomb",
             "weapon", "drugs", "porn", "sex", "kill", "suicide", "self harm",
             "jailbreak", "prompt injection", "system prompt", "developer prompt", "hidden prompt",
             "initial prompt", "internal prompt", "secret prompt", "ignore instructions", "ignore previous",
@@ -81,7 +81,7 @@ public final class AiPromptPolicyTerms {
             "developer message", "system message", "tool message", "chain of thought", "hidden reasoning",
             "private reasoning", "show reasoning", "scratchpad", "internal reasoning", "confidential",
             "secret", "secrets", "api key", "api keys", "apikey", "access token", "refresh token",
-            "bearer token", "jwt", "session token", "cookie", "cookies", "csrf", "credential",
+            "bearer token", "jwt", "jwt token", "jwt tokens", "session token", "cookie", "cookies", "csrf", "credential",
             "credentials", "login", "admin login", "root password", "database password", "db password",
             "env", "environment variable", "env var", "dotenv", ".env", "private key", "ssh key",
             "rsa key", "pem", "certificate", "vault", "keystore", "connection string", "jdbc url",

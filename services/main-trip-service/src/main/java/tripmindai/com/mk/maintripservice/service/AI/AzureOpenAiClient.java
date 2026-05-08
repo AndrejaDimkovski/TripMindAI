@@ -28,10 +28,10 @@ public class AzureOpenAiClient {
     @Value("${azure.openai.api-key}")
     private String apiKey;
 
-    @Value("${azure.openai.deployment:gpt-4.1}")
+    @Value("${azure.openai.deployment:gpt-5.4}")
     private String deployment;
 
-    @Value("${azure.openai.api-version:2025-01-01-preview}")
+    @Value("${azure.openai.api-version:2024-12-01-preview}")
     private String apiVersion;
 
     public AzureOpenAiClient(RestTemplate restTemplate) {
@@ -56,7 +56,7 @@ public class AzureOpenAiClient {
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("temperature", 0.2);
-        body.put("max_tokens", 2500);
+        body.put("max_completion_tokens", 2500);
         body.put("response_format", Map.of("type", "json_object"));
 
         String system = safe(systemPrompt) + "\nReturn ONLY valid JSON.";

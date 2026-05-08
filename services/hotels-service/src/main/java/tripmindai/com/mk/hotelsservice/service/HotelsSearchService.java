@@ -41,12 +41,24 @@ public class HotelsSearchService {
             int adults,
             int pageNo
     ) {
-        return searchHotels(destId, destType, checkIn, checkOut, adults, pageNo, null);
+        return searchHotels(destId, destType, checkIn, checkOut, adults, pageNo, null, 1);
+    }
+
+    public HotelSearchResponseDto searchHotels(
+            String destId,
+            String destType,
+            String checkIn,
+            String checkOut,
+            int adults,
+            int pageNo,
+            String priceRange
+    ) {
+        return searchHotels(destId, destType, checkIn, checkOut, adults, pageNo, priceRange, 1);
     }
 
     @Cacheable(
             cacheNames = "hotel-search",
-            key = "#root.target.hotelSearchCacheKey(#destId, #destType, #checkIn, #checkOut, #adults, #pageNo, #priceRange)",
+            key = "#root.target.hotelSearchCacheKey(#destId, #destType, #checkIn, #checkOut, #adults, #pageNo, #priceRange, #roomQuantity)",
             unless = "#result == null"
     )
     public HotelSearchResponseDto searchHotels(
@@ -56,7 +68,8 @@ public class HotelsSearchService {
             String checkOut,
             int adults,
             int pageNo,
-            String priceRange
+            String priceRange,
+            int roomQuantity
     ) {
         LocalDate in = parseDateOrTomorrow(checkIn);
         LocalDate out = parseDateOrTomorrow(checkOut);
@@ -67,6 +80,7 @@ public class HotelsSearchService {
 
         int adultsEff = Math.max(1, adults);
         int pageEff = Math.max(1, pageNo);
+        int roomQuantityEff = Math.max(1, roomQuantity);
 
         Map<?, ?> raw = bookingClient.searchHotelsRaw(
                 destId,
@@ -74,6 +88,7 @@ public class HotelsSearchService {
                 in.toString(),
                 out.toString(),
                 adultsEff,
+                roomQuantityEff,
                 pageEff
         );
 
@@ -96,9 +111,19 @@ public class HotelsSearchService {
         );
     }
 
+    public HotelDetailsDto hotelDetails(
+            String hotelId,
+            String checkIn,
+            String checkOut,
+            int adults,
+            String cityNameFromReq
+    ) {
+        return hotelDetails(hotelId, checkIn, checkOut, adults, cityNameFromReq, 1);
+    }
+
     @Cacheable(
             cacheNames = "hotel-details",
-            key = "#root.target.hotelDetailsCacheKey(#hotelId, #checkIn, #checkOut, #adults, #cityNameFromReq)",
+            key = "#root.target.hotelDetailsCacheKey(#hotelId, #checkIn, #checkOut, #adults, #cityNameFromReq, #roomQuantity)",
             unless = "#result == null"
     )
     public HotelDetailsDto hotelDetails(
@@ -106,7 +131,8 @@ public class HotelsSearchService {
             String checkIn,
             String checkOut,
             int adults,
-            String cityNameFromReq
+            String cityNameFromReq,
+            int roomQuantity
     ) {
         if (isBlank(hotelId)) return null;
 
@@ -118,12 +144,14 @@ public class HotelsSearchService {
         }
 
         int adultsEff = Math.max(1, adults);
+        int roomQuantityEff = Math.max(1, roomQuantity);
 
         Map<?, ?> raw = bookingClient.hotelDetailsRaw(
                 hotelId.trim(),
                 in.toString(),
                 out.toString(),
-                adultsEff
+                adultsEff,
+                roomQuantityEff
         );
 
         if (raw == null) return null;
@@ -261,9 +289,19 @@ public class HotelsSearchService {
         );
     }
 
+    public HotelFullDetailsDto hotelFullDetails(
+            String hotelId,
+            String checkIn,
+            String checkOut,
+            int adults,
+            String cityNameFromReq
+    ) {
+        return hotelFullDetails(hotelId, checkIn, checkOut, adults, cityNameFromReq, 1);
+    }
+
     @Cacheable(
             cacheNames = "hotel-full-details",
-            key = "#root.target.hotelDetailsCacheKey(#hotelId, #checkIn, #checkOut, #adults, #cityNameFromReq)",
+            key = "#root.target.hotelDetailsCacheKey(#hotelId, #checkIn, #checkOut, #adults, #cityNameFromReq, #roomQuantity)",
             unless = "#result == null"
     )
     public HotelFullDetailsDto hotelFullDetails(
@@ -271,7 +309,8 @@ public class HotelsSearchService {
             String checkIn,
             String checkOut,
             int adults,
-            String cityNameFromReq
+            String cityNameFromReq,
+            int roomQuantity
     ) {
         if (isBlank(hotelId)) return null;
 
@@ -283,24 +322,27 @@ public class HotelsSearchService {
         }
 
         int adultsEff = Math.max(1, adults);
+        int roomQuantityEff = Math.max(1, roomQuantity);
 
         HotelDetailsDto basicDetails = hotelDetails(
                 hotelId,
                 in.toString(),
                 out.toString(),
                 adultsEff,
-                cityNameFromReq
+                cityNameFromReq,
+                roomQuantityEff
         );
 
         Map<?, ?> rawDetails = bookingClient.hotelDetailsRaw(
                 hotelId,
                 in.toString(),
                 out.toString(),
-                adultsEff
+                adultsEff,
+                roomQuantityEff
         );
 
         Map<?, ?> descriptionRaw = bookingClient.getDescriptionAndInfoRaw(hotelId);
-        Map<?, ?> roomsRaw = bookingClient.getRoomListRaw(hotelId, in.toString(), out.toString(), adultsEff);
+        Map<?, ?> roomsRaw = bookingClient.getRoomListRaw(hotelId, in.toString(), out.toString(), adultsEff, roomQuantityEff);
         Map<?, ?> photosRaw = bookingClient.getHotelPhotosRaw(hotelId);
         Map<?, ?> facilitiesRaw = bookingClient.getHotelFacilitiesRaw(hotelId);
 
@@ -333,7 +375,8 @@ public class HotelsSearchService {
             String checkOut,
             int adults,
             int pageNo,
-            String priceRange
+            String priceRange,
+            int roomQuantity
     ) {
         LocalDate in = parseDateOrTomorrow(checkIn);
         LocalDate out = parseDateOrTomorrow(checkOut);
@@ -349,6 +392,7 @@ public class HotelsSearchService {
                 out.toString(),
                 String.valueOf(Math.max(1, adults)),
                 String.valueOf(Math.max(1, pageNo)),
+                String.valueOf(Math.max(1, roomQuantity)),
                 normalizeCachePart(priceRange)
         );
     }
@@ -358,7 +402,8 @@ public class HotelsSearchService {
             String checkIn,
             String checkOut,
             int adults,
-            String cityNameFromReq
+            String cityNameFromReq,
+            int roomQuantity
     ) {
         LocalDate in = parseDateOrTomorrow(checkIn);
         LocalDate out = parseDateOrTomorrow(checkOut);
@@ -372,6 +417,7 @@ public class HotelsSearchService {
                 in.toString(),
                 out.toString(),
                 String.valueOf(Math.max(1, adults)),
+                String.valueOf(Math.max(1, roomQuantity)),
                 normalizeCachePart(cityNameFromReq)
         );
     }

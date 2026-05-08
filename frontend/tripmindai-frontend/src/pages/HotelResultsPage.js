@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const FLOW_STORAGE_KEY = "tm_flow_v1";
+const RESULTS_PER_PAGE = 10;
 
 function readFlowState() {
     try {
@@ -146,6 +147,20 @@ function refundText(offer) {
     return null;
 }
 
+function roomOptionsText(offers) {
+    const roomOptions = [...new Set(
+        safeArray(offers)
+            .map((offer) => Number(offer?.roomQuantity || 1))
+            .filter((value) => Number.isFinite(value) && value > 0)
+    )].sort((a, b) => a - b);
+
+    if (!roomOptions.length) return "N/A";
+
+    return roomOptions
+        .map((rooms) => `${rooms} room${rooms === 1 ? "" : "s"}`)
+        .join(" / ");
+}
+
 function HeroPill({ children }) {
     return (
         <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-white/90 backdrop-blur">
@@ -207,11 +222,55 @@ function InfoTile({ label, value }) {
     );
 }
 
+function PaginationControls({ currentPage, totalPages, onPageChange }) {
+    if (totalPages <= 1) return null;
+
+    const pages = Array.from({ length: totalPages }, (_, index) => index + 1);
+
+    return (
+        <div className="flex flex-wrap items-center gap-2">
+            <button
+                type="button"
+                onClick={() => onPageChange(currentPage - 1)}
+                disabled={currentPage <= 1}
+                className="rounded-2xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+                Previous
+            </button>
+
+            {pages.map((page) => (
+                <button
+                    key={page}
+                    type="button"
+                    onClick={() => onPageChange(page)}
+                    className={`h-10 min-w-10 rounded-2xl px-3 text-sm font-bold transition ${
+                        page === currentPage
+                            ? "bg-emerald-500 text-white"
+                            : "border border-white/15 bg-white/10 text-white hover:bg-white/20"
+                    }`}
+                >
+                    {page}
+                </button>
+            ))}
+
+            <button
+                type="button"
+                onClick={() => onPageChange(currentPage + 1)}
+                disabled={currentPage >= totalPages}
+                className="rounded-2xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+                Next
+            </button>
+        </div>
+    );
+}
+
 export default function HotelResultsPage() {
     const navigate = useNavigate();
 
     const [flow, setFlow] = useState(null);
     const [selectedHotelIndex, setSelectedHotelIndex] = useState(null);
+    const [currentPage, setCurrentPage] = useState(1);
 
     useEffect(() => {
         const current = readFlowState();
@@ -244,6 +303,7 @@ export default function HotelResultsPage() {
     const offers = useMemo(() => safeArray(searchResult?.hotelOffers), [searchResult]);
     const searchForm = flow?.searchForm || {};
     const currency = searchForm?.targetCurrency || "EUR";
+    const preferredRoomQuantity = Math.max(1, Number(searchForm?.roomQuantity || 1));
     const hotelOnly = isHotelOnly(flow);
 
     const destinationName = flow?.destination?.name || "Destination";
@@ -253,6 +313,21 @@ export default function HotelResultsPage() {
     const hotelsMessage =
         flow?.searchResult?.hotelsMessage ||
         "Hotel service is temporarily unavailable. Please try again later.";
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [hotels.length]);
+
+    const totalPages = Math.max(1, Math.ceil(hotels.length / RESULTS_PER_PAGE));
+    const safeCurrentPage = Math.min(currentPage, totalPages);
+    const pageStartIndex = (safeCurrentPage - 1) * RESULTS_PER_PAGE;
+    const pageEndIndex = Math.min(pageStartIndex + RESULTS_PER_PAGE, hotels.length);
+    const paginatedHotels = hotels.slice(pageStartIndex, pageEndIndex);
+
+    function changePage(page) {
+        const nextPage = Math.min(Math.max(page, 1), totalPages);
+        setCurrentPage(nextPage);
+    }
 
     const selectedFlight = useMemo(() => {
         if (!flow || flow.selectedFlightIndex == null) return null;
@@ -273,12 +348,18 @@ export default function HotelResultsPage() {
         }
 
         for (const [hotelId, hotelOffers] of map.entries()) {
-            hotelOffers.sort((a, b) => getOfferComparePrice(a) - getOfferComparePrice(b));
+            hotelOffers.sort((a, b) => {
+                const aPreferred = Number(a?.roomQuantity || 1) === preferredRoomQuantity;
+                const bPreferred = Number(b?.roomQuantity || 1) === preferredRoomQuantity;
+
+                if (aPreferred !== bPreferred) return aPreferred ? -1 : 1;
+                return getOfferComparePrice(a) - getOfferComparePrice(b);
+            });
             map.set(hotelId, hotelOffers);
         }
 
         return map;
-    }, [offers]);
+    }, [offers, preferredRoomQuantity]);
 
     const selectedHotel = useMemo(() => {
         if (selectedHotelIndex == null) return null;
@@ -488,7 +569,19 @@ export default function HotelResultsPage() {
                     ) : (
                         <div className="mt-10 grid gap-6 lg:grid-cols-[1.12fr_0.88fr]">
                             <div className="space-y-5">
-                                {hotels.map((hotel, index) => {
+                                <div className="flex flex-col gap-3 rounded-[24px] border border-white/10 bg-white/10 p-4 text-white sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="text-sm font-semibold text-white/75">
+                                        Showing {pageStartIndex + 1}-{pageEndIndex} of {hotels.length} hotels
+                                    </div>
+                                    <PaginationControls
+                                        currentPage={safeCurrentPage}
+                                        totalPages={totalPages}
+                                        onPageChange={changePage}
+                                    />
+                                </div>
+
+                                {paginatedHotels.map((hotel, pageIndex) => {
+                                    const index = pageStartIndex + pageIndex;
                                     const hotelOffers = offersByHotelId.get(hotel.hotelId) || [];
                                     const cheapest = hotelOffers[0] || null;
                                     const isSelected = selectedHotelIndex === index;
@@ -553,6 +646,7 @@ export default function HotelResultsPage() {
                                                                         : "No offers grouped"
                                                                 }
                                                             />
+                                                            <InfoTile label="Room options" value={roomOptionsText(hotelOffers)} />
                                                             <InfoTile
                                                                 label="Stay"
                                                                 value={nights ? `${nights} night${nights > 1 ? "s" : ""}` : "—"}
@@ -600,6 +694,14 @@ export default function HotelResultsPage() {
                                         </div>
                                     );
                                 })}
+
+                                <div className="flex justify-end">
+                                    <PaginationControls
+                                        currentPage={safeCurrentPage}
+                                        totalPages={totalPages}
+                                        onPageChange={changePage}
+                                    />
+                                </div>
                             </div>
 
                             <aside>
@@ -635,6 +737,7 @@ export default function HotelResultsPage() {
                                                         value={[selectedHotel?.address, selectedHotel?.city, selectedHotel?.country].filter(Boolean).join(", ") || "—"}
                                                     />
                                                     <InfoTile label="Price" value={priceText(selectedHotelOffer, currency)} />
+                                                    <InfoTile label="Room option" value={roomOptionsText(selectedHotelOffers)} />
                                                     <InfoTile label="Nightly" value={nightlyPriceText(selectedHotelOffer, currency) || "—"} />
                                                     <InfoTile
                                                         label="Dates"

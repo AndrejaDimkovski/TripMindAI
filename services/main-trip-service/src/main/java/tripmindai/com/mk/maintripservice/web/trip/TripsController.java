@@ -68,9 +68,10 @@ public class TripsController {
             @RequestParam String checkIn,
             @RequestParam String checkOut,
             @RequestParam(defaultValue = "1") int adults,
+            @RequestParam(required = false, defaultValue = "1") Integer roomQuantity,
             @RequestParam(required = false) String cityName
     ) {
-        return service.hotelDetails(hotelId, checkIn, checkOut, adults, cityName);
+        return service.hotelDetails(hotelId, checkIn, checkOut, adults, cityName, roomQuantity == null ? 1 : Math.max(1, roomQuantity));
     }
 
     @GetMapping("/hotel-full-details")
@@ -79,9 +80,10 @@ public class TripsController {
             @RequestParam String checkIn,
             @RequestParam String checkOut,
             @RequestParam(defaultValue = "1") int adults,
+            @RequestParam(required = false, defaultValue = "1") Integer roomQuantity,
             @RequestParam(required = false) String cityName
     ) {
-        return service.hotelFullDetails(hotelId, checkIn, checkOut, adults, cityName);
+        return service.hotelFullDetails(hotelId, checkIn, checkOut, adults, cityName, roomQuantity == null ? 1 : Math.max(1, roomQuantity));
     }
 
     @GetMapping("/flight-details")

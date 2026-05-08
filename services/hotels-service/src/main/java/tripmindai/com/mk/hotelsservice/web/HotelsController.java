@@ -38,6 +38,7 @@ public class HotelsController {
             @RequestParam @NotBlank(message = "checkIn is required") String checkIn,
             @RequestParam @NotBlank(message = "checkOut is required") String checkOut,
             @RequestParam(defaultValue = "1") @Min(1) int adults,
+            @RequestParam(defaultValue = "1") @Min(1) int roomQuantity,
             @RequestParam(defaultValue = "1") @Min(1) int pageNo,
             @RequestParam(required = false) String priceRange
     ) {
@@ -48,7 +49,8 @@ public class HotelsController {
                 safeTrim(checkOut),
                 adults,
                 pageNo,
-                safeTrim(priceRange)
+                safeTrim(priceRange),
+                roomQuantity
         );
     }
 
@@ -58,6 +60,7 @@ public class HotelsController {
             @RequestParam @NotBlank(message = "checkIn is required") String checkIn,
             @RequestParam @NotBlank(message = "checkOut is required") String checkOut,
             @RequestParam(defaultValue = "1") @Min(1) int adults,
+            @RequestParam(defaultValue = "1") @Min(1) int roomQuantity,
             @RequestParam(required = false) String cityName
     ) {
         return hotelsSearchService.hotelDetails(
@@ -65,7 +68,8 @@ public class HotelsController {
                 safeTrim(checkIn),
                 safeTrim(checkOut),
                 adults,
-                safeTrim(cityName)
+                safeTrim(cityName),
+                roomQuantity
         );
     }
 
@@ -75,6 +79,7 @@ public class HotelsController {
             @RequestParam @NotBlank(message = "checkIn is required") String checkIn,
             @RequestParam @NotBlank(message = "checkOut is required") String checkOut,
             @RequestParam(defaultValue = "1") @Min(1) int adults,
+            @RequestParam(defaultValue = "1") @Min(1) int roomQuantity,
             @RequestParam(required = false) String cityName
     ) {
         return hotelsSearchService.hotelFullDetails(
@@ -82,7 +87,8 @@ public class HotelsController {
                 safeTrim(checkIn),
                 safeTrim(checkOut),
                 adults,
-                safeTrim(cityName)
+                safeTrim(cityName),
+                roomQuantity
         );
     }
 

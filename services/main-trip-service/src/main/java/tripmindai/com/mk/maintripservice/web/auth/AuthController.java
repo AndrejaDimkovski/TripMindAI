@@ -333,7 +333,7 @@ public class AuthController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must contain at least 8 characters, one uppercase letter, one number, and one special character.");
         }
         if (users.existsByEmailIgnoreCase(email)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "This email is already in use.");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email address already exists.");
         }
     }
 
